@@ -1,0 +1,4 @@
+locals {
+  org_name: "ShalotrackLanka"
+  project_name: "tracking-platform"
+}
