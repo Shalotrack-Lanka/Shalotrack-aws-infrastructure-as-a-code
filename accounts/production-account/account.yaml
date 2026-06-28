@@ -1,4 +1,4 @@
 locals {
   # Replace this with your actual 12-digit AWS Account ID
-  aws_account_id: "054014030810" 
+  aws_account_id = "054014030810" 
 }
