@@ -1,0 +1,10 @@
+# Ignore Terragrunt caching directories
+**/.terragrunt-cache/*
+
+# Ignore local Terraform plugin and state directories
+**/.terraform/*
+*.tfstate
+*.tfstate.*
+
+# Ignore lock files if you don't want them tracked (optional, but keep cache out!)
+.terraform.lock.hcl
