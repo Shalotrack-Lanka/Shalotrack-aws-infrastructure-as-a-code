@@ -30,7 +30,7 @@ data "aws_ami" "amazon_linux" {
 resource "aws_launch_template" "gateway" {
   name_prefix   = "shalotrack-gateway-"
   image_id      = data.aws_ami.amazon_linux.id
-  instance_type = "t3.micro"
+  instance_type = "t3.medium"
   iam_instance_profile { name = var.iam_profile }
   vpc_security_group_ids = [var.gateway_sg]
 
