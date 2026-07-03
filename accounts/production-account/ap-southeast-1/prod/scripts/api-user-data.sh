@@ -6,6 +6,5 @@ aws ecr get-login-password --region ap-southeast-1 | docker login --username AWS
 docker run -d --restart always --name shalotrack-api \
   -p 80:80 \
   -e ASPNETCORE_HTTP_PORTS="80" \
-  -e ConnectionStrings__DefaultConnection="Host=aws-0-ap-southeast-1.pooler.supabase.com;Port=6543;Database=postgres;Username=postgres.[YOUR_PROJECT];Password=[YOUR_PASSWORD]" \
+  -e ConnectionStrings__DefaultConnection="Host=aws-1-ap-southeast-1.pooler.supabase.com;Port=5432;Database=postgres;Username=postgres.riyjkfwxkamqbuuuwdli;Password=tadK*7ASa_#,-NL" \
   ${ecr_url}:latest
-
