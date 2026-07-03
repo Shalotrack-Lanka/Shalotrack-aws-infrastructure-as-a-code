@@ -21,7 +21,10 @@ variable "ecr_url" { type = string }
 data "aws_ami" "amazon_linux" {
   most_recent = true
   owners      = ["amazon"]
-  filter { name = "name", values = ["al2023-ami-2023.*-x86_64"] }
+  filter { 
+    name   = "name"
+    values = ["al2023-ami-2023.*-x86_64"] 
+  }
 }
 
 resource "aws_launch_template" "gateway" {
@@ -32,7 +35,7 @@ resource "aws_launch_template" "gateway" {
   vpc_security_group_ids = [var.gateway_sg]
 
   # Reads the clean shell script from the scripts folder and renders variables
-  user_data = base64encode(templatefile("../scripts/gateway-user-data.sh", {
+  user_data = base64encode(templatefile("${get_terragrunt_dir()}/../scripts/gateway-user-data.sh", {
     ecr_url = var.ecr_url
   }))
 }

@@ -21,7 +21,10 @@ variable "ecr_url" { type = string }
 data "aws_ami" "amazon_linux" {
   most_recent = true
   owners      = ["amazon"]
-  filter { name = "name", values = ["al2023-ami-2023.*-x86_64"] }
+  filter { 
+    name   = "name"
+    values = ["al2023-ami-2023.*-x86_64"] 
+  }
 }
 
 resource "aws_launch_template" "api" {
@@ -31,7 +34,8 @@ resource "aws_launch_template" "api" {
   iam_instance_profile { name = var.iam_profile }
   vpc_security_group_ids = [var.web_sg]
 
-  user_data = base64encode(templatefile("../scripts/api-user-data.sh", {
+  # Absolute path fix via get_terragrunt_dir()
+  user_data = base64encode(templatefile("${get_terragrunt_dir()}/../scripts/api-user-data.sh", {
     ecr_url = var.ecr_url
   }))
 }

@@ -21,10 +21,12 @@ variable "ecr_url" { type = string }
 data "aws_ami" "amazon_linux" {
   most_recent = true
   owners      = ["amazon"]
-  filter { name = "name", values = ["al2023-ami-2023.*-x86_64"] }
+  filter { 
+    name   = "name"
+    values = ["al2023-ami-2023.*-x86_64"] 
+  }
 }
 
-# 1. Standard permanent EC2 Instance for Administration management
 resource "aws_instance" "admin" {
   ami                  = data.aws_ami.amazon_linux.id
   instance_type        = "t3.micro"
@@ -32,14 +34,14 @@ resource "aws_instance" "admin" {
   vpc_security_group_ids = [var.web_sg]
   iam_instance_profile = var.iam_profile
 
-  user_data = base64encode(templatefile("../scripts/admin-user-data.sh", {
+  # Absolute path fix via get_terragrunt_dir()
+  user_data = base64encode(templatefile("${get_terragrunt_dir()}/../scripts/admin-user-data.sh", {
     ecr_url = var.ecr_url
   }))
 
   tags = { Name = "shalotrack-admin-portal" }
 }
 
-# 2. Attach the permanent instance directly into the ALB Target Group
 resource "aws_lb_target_group_attachment" "admin_attach" {
   target_group_arn = var.tg_arn
   target_id        = aws_instance.admin.id
