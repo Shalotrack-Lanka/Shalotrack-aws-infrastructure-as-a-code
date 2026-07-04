@@ -17,6 +17,8 @@ variable "gateway_sg" { type = string }
 variable "iam_profile" { type = string }
 variable "tg_arn" { type = string }
 variable "ecr_url" { type = string }
+variable "database_url" { type = string }
+variable "db_connection_string" { type = string }
 
 data "aws_ami" "amazon_linux" {
   most_recent = true
@@ -36,7 +38,8 @@ resource "aws_launch_template" "gateway" {
 
   # Reads the clean shell script from the scripts folder and renders variables
   user_data = base64encode(templatefile("${get_terragrunt_dir()}/../scripts/gateway-user-data.sh", {
-    ecr_url = var.ecr_url
+    ecr_url      = var.ecr_url
+    database_url = var.database_url # <-- Pass it here
   }))
 }
 
@@ -61,4 +64,5 @@ inputs = {
   iam_profile     = dependency.iam.outputs.instance_profile_name
   tg_arn          = dependency.nlb.outputs.gateway_tg_arn
   ecr_url         = dependency.ecr.outputs.gateway_repo_url
+  database_url = get_env("SUPABASE_DATABASE_URL")
 }
