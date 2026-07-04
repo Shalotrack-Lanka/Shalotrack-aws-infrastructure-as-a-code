@@ -31,7 +31,7 @@ data "aws_ami" "amazon_linux" {
 resource "aws_launch_template" "api" {
   name_prefix   = "shalotrack-api-"
   image_id      = data.aws_ami.amazon_linux.id
-  instance_type = "t3.medium"
+  instance_type = "t3.micro"
   iam_instance_profile { name = var.iam_profile }
   vpc_security_group_ids = [var.web_sg]
 
