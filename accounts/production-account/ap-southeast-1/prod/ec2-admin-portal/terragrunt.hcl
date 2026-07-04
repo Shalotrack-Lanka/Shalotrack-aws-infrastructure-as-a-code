@@ -12,6 +12,14 @@ generate "main" {
   path      = "main.tf"
   if_exists = "overwrite_terragrunt"
   contents  = <<EOF
+# --- Original Infrastructure Variables Restored ---
+variable "private_subnets" { type = list(string) }
+variable "web_sg" { type = string }
+variable "iam_profile" { type = string }
+variable "tg_arn" { type = string }
+variable "ecr_url" { type = string }
+
+# --- App Secrets Variables ---
 variable "app_key" { type = string }
 variable "db_host" { type = string }
 variable "db_port" { type = string }
@@ -63,9 +71,10 @@ inputs = {
   iam_profile     = dependency.iam.outputs.instance_profile_name
   tg_arn          = dependency.alb.outputs.admin_tg_arn
   ecr_url         = dependency.ecr.outputs.admin_repo_url
+  
   app_key     = get_env("LARAVEL_APP_KEY")
   db_host     = "aws-1-ap-southeast-1.pooler.supabase.com"
-  db_port     = "6543" # <-- Note: Always use 6543 for Supabase pooler connection routing
+  db_port     = "6543" 
   db_database = "postgres"
   db_username = "postgres.riyjkfwxkamqbuuuwdli"
   db_password = get_env("SUPABASE_DB_PASSWORD")
