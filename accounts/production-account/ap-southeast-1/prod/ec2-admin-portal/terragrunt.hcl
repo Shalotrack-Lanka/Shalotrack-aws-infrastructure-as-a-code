@@ -12,14 +12,12 @@ generate "main" {
   path      = "main.tf"
   if_exists = "overwrite_terragrunt"
   contents  = <<EOF
-# --- Original Infrastructure Variables Restored ---
 variable "private_subnets" { type = list(string) }
 variable "web_sg" { type = string }
 variable "iam_profile" { type = string }
 variable "tg_arn" { type = string }
 variable "ecr_url" { type = string }
 
-# --- App Secrets Variables ---
 variable "app_key" { type = string }
 variable "db_host" { type = string }
 variable "db_port" { type = string }
@@ -36,14 +34,14 @@ data "aws_ami" "amazon_linux" {
   }
 }
 
-resource "aws_instance" "admin" {
-  ami                  = data.aws_ami.amazon_linux.id
-  instance_type        = "t3.micro"
-  subnet_id            = var.private_subnets[0]
+# 1. Converted to a Launch Template
+resource "aws_launch_template" "admin" {
+  name_prefix   = "shalotrack-admin-"
+  image_id      = data.aws_ami.amazon_linux.id
+  instance_type = "t3.micro"
+  iam_instance_profile { name = var.iam_profile }
   vpc_security_group_ids = [var.web_sg]
-  iam_instance_profile = var.iam_profile
 
-  # Absolute path fix via get_terragrunt_dir()
   user_data = base64encode(templatefile("${get_terragrunt_dir()}/../scripts/admin-user-data.sh", {
     ecr_url     = var.ecr_url
     app_key     = var.app_key
@@ -54,13 +52,25 @@ resource "aws_instance" "admin" {
     db_password = var.db_password
   }))
 
-  tags = { Name = "shalotrack-admin-portal" }
+  tag_specifications {
+    resource_type = "instance"
+    tags = { Name = "shalotrack-admin-portal" }
+  }
 }
 
-resource "aws_lb_target_group_attachment" "admin_attach" {
-  target_group_arn = var.tg_arn
-  target_id        = aws_instance.admin.id
-  port             = 80
+# 2. The Self-Healing ASG (Min 1, Max 1)
+resource "aws_autoscaling_group" "admin" {
+  name                = "shalotrack-admin-asg"
+  vpc_zone_identifier = var.private_subnets
+  target_group_arns   = [var.tg_arn]
+  min_size            = 1
+  max_size            = 1
+  desired_capacity    = 1
+
+  launch_template {
+    id      = aws_launch_template.admin.id
+    version = "$Latest"
+  }
 }
 EOF
 }

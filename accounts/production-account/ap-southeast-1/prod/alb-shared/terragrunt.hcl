@@ -64,6 +64,7 @@ resource "aws_lb_target_group" "admin_tg" {
   health_check {
     path = "/"
     port = "80"
+    matcher = "200-399"
   }
 }
 
