@@ -62,7 +62,7 @@ resource "aws_security_group" "gateway_asg" {
     from_port       = 8000
     to_port         = 8000
     protocol        = "tcp"
-    security_groups = [aws_security_group.load_balancers.id]
+    cidr_blocks = ["0.0.0.0/0"]
   }
 
   egress {
