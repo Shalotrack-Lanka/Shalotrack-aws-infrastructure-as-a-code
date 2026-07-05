@@ -28,6 +28,14 @@ resource "aws_security_group" "load_balancers" {
   vpc_id      = var.vpc_id
 
   ingress {
+    description = "HTTP Traffic from Cloudflare"
+    from_port   = 80
+    to_port     = 80
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+  
+  ingress {
     description = "GPS GT06 Protocol"
     from_port   = 8000
     to_port     = 8000
