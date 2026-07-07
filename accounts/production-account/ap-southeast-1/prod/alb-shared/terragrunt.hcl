@@ -43,7 +43,7 @@ resource "aws_lb_target_group" "api_tg" {
   target_type = "instance"
 
   health_check {
-    path                = "/api/Customer"
+    path                = "/health"
     port                = "80"
     protocol            = "HTTP"
     interval            = 30
