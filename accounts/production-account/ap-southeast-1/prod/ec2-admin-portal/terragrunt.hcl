@@ -82,10 +82,10 @@ inputs = {
   tg_arn          = dependency.alb.outputs.admin_tg_arn
   ecr_url         = dependency.ecr.outputs.admin_repo_url
   
-  app_key     = get_env("LARAVEL_APP_KEY")
+  app_key     = get_env("ADMIN_APP_KEY")
   db_host     = "aws-1-ap-southeast-1.pooler.supabase.com"
-  db_port     = "6543" 
+  db_port     = "5432" 
   db_database = "postgres"
-  db_username = "postgres.riyjkfwxkamqbuuuwdli"
-  db_password = get_env("SUPABASE_DB_PASSWORD")
+  db_username = "postgres.napretecotsfackknsgf"
+  db_password = get_env("ADMIN_DB_PASSWORD")
 }
