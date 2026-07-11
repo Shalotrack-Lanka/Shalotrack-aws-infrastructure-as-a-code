@@ -54,7 +54,7 @@ resource "aws_iam_instance_profile" "ec2_profile" {
   role = aws_iam_role.ec2_app_role.name
 }
 
-# 7. Custom SSM Parameter Store Policy (Allows decryption of app parameters)
+# 7. Custom SSM Parameter Store Policy (Allows decryption of admin, gateway & api parameters)
 resource "aws_iam_role_policy" "ssm_parameters" {
   name = "shalotrack-ssm-parameters-policy"
   role = aws_iam_role.ec2_app_role.id
@@ -65,11 +65,15 @@ resource "aws_iam_role_policy" "ssm_parameters" {
       {
         Effect = "Allow"
         Action = [
-          "ssm:GetParameter",
+          "sm:GetParameter",
           "ssm:GetParameters",
           "ssm:GetParametersByPath"
         ]
-        Resource = "arn:aws:ssm:*:*:parameter/shalotrack/prod/admin/*"
+        Resource = [
+          "arn:aws:ssm:ap-southeast-1:*:parameter/shalotrack/prod/admin/*",
+          "arn:aws:ssm:ap-southeast-1:*:parameter/shalotrack/prod/gateway/*",
+          "arn:aws:ssm:ap-southeast-1:*:parameter/shalotrack/prod/api/*"
+        ]
       }
     ]
   })
