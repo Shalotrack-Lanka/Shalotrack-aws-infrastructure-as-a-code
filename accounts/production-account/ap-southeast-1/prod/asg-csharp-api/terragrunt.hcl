@@ -17,7 +17,6 @@ variable "web_sg" { type = string }
 variable "iam_profile" { type = string }
 variable "tg_arn" { type = string }
 variable "ecr_url" { type = string }
-variable "db_connection_string" { type = string }
 
 data "aws_ami" "amazon_linux" {
   most_recent = true
@@ -35,10 +34,9 @@ resource "aws_launch_template" "api" {
   iam_instance_profile { name = var.iam_profile }
   vpc_security_group_ids = [var.web_sg]
 
-  # Absolute path fix via get_terragrunt_dir()
+  # Cleaned up: Removed db_connection_string from the template rendering layout completely[cite: 7]
   user_data = base64encode(templatefile("${get_terragrunt_dir()}/../scripts/api-user-data.sh", {
-    ecr_url              = var.ecr_url
-    db_connection_string = var.db_connection_string
+    ecr_url = var.ecr_url
   }))
 }
 
@@ -63,5 +61,6 @@ inputs = {
   iam_profile     = dependency.iam.outputs.instance_profile_name
   tg_arn          = dependency.alb.outputs.api_tg_arn
   ecr_url         = dependency.ecr.outputs.api_repo_url
-  db_connection_string = get_env("SUPABASE_CSHARP_CONNECTION_STRING")
+  
+  # Cleaned up: db_connection_string get_env check has been scrubbed out entirely[cite: 7]
 }
