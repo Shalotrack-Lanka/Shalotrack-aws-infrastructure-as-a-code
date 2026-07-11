@@ -34,7 +34,6 @@ resource "aws_launch_template" "api" {
   iam_instance_profile { name = var.iam_profile }
   vpc_security_group_ids = [var.web_sg]
 
-  # Cleaned up: Removed db_connection_string from the template rendering layout completely[cite: 7]
   user_data = base64encode(templatefile("${get_terragrunt_dir()}/../scripts/api-user-data.sh", {
     ecr_url = var.ecr_url
   }))
@@ -51,6 +50,12 @@ resource "aws_autoscaling_group" "api" {
     id      = aws_launch_template.api.id
     version = "$Latest"
   }
+
+  tag {
+    key                 = "Name"
+    value               = "Api-shalotrack"
+    propagate_at_launch = true
+  }
 }
 EOF
 }
@@ -61,6 +66,4 @@ inputs = {
   iam_profile     = dependency.iam.outputs.instance_profile_name
   tg_arn          = dependency.alb.outputs.api_tg_arn
   ecr_url         = dependency.ecr.outputs.api_repo_url
-  
-  # Cleaned up: db_connection_string get_env check has been scrubbed out entirely[cite: 7]
 }
