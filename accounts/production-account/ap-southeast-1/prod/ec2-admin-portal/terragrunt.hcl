@@ -68,6 +68,13 @@ resource "aws_autoscaling_group" "admin" {
     id      = aws_launch_template.admin.id
     version = "$Latest"
   }
+
+  tag {
+    key                 = "Name"
+    value               = "Admin-shalotrack"
+    propagate_at_launch = true
+  } 
+
 }
 EOF
 }
