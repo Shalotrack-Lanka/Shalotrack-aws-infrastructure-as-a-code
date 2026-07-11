@@ -30,11 +30,10 @@ data "aws_ami" "amazon_linux" {
 resource "aws_launch_template" "gateway" {
   name_prefix   = "shalotrack-gateway-"
   image_id      = data.aws_ami.amazon_linux.id
-  instance_type = "t3.micro"
+  instance_type = "t3.small"
   iam_instance_profile { name = var.iam_profile }
   vpc_security_group_ids = [var.gateway_sg]
 
-  # Cleaned up: Removed database_url from the template rendering engine completely[cite: 3]
   user_data = base64encode(templatefile("${get_terragrunt_dir()}/../scripts/gateway-user-data.sh", {
     ecr_url      = var.ecr_url
   }))
@@ -51,6 +50,12 @@ resource "aws_autoscaling_group" "gateway" {
     id      = aws_launch_template.gateway.id
     version = "$Latest"
   }
+
+  tag {
+    key                 = "Name"
+    value               = "Gateway-shalotrack"
+    propagate_at_launch = true
+  }
 }
 EOF
 }
@@ -61,6 +66,4 @@ inputs = {
   iam_profile     = dependency.iam.outputs.instance_profile_name
   tg_arn          = dependency.nlb.outputs.gateway_tg_arn
   ecr_url         = dependency.ecr.outputs.gateway_repo_url
-  
-  # Cleaned up: database_url get_env has been completely scrubbed out[cite: 3]
 }
