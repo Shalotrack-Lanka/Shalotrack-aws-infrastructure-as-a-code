@@ -18,12 +18,10 @@ variable "iam_profile" { type = string }
 variable "tg_arn" { type = string }
 variable "ecr_url" { type = string }
 
-variable "app_key" { type = string }
 variable "db_host" { type = string }
 variable "db_port" { type = string }
 variable "db_database" { type = string }
 variable "db_username" { type = string }
-variable "db_password" { type = string }
 
 data "aws_ami" "amazon_linux" {
   most_recent = true
@@ -42,14 +40,13 @@ resource "aws_launch_template" "admin" {
   iam_instance_profile { name = var.iam_profile }
   vpc_security_group_ids = [var.web_sg]
 
+  # Cleaned up: Removed app_key and db_password mapping references here
   user_data = base64encode(templatefile("${get_terragrunt_dir()}/../scripts/admin-user-data.sh", {
     ecr_url     = var.ecr_url
-    app_key     = var.app_key
     db_host     = var.db_host
     db_port     = var.db_port
     db_database = var.db_database
     db_username = var.db_username
-    db_password = var.db_password
   }))
 
   tag_specifications {
@@ -82,10 +79,9 @@ inputs = {
   tg_arn          = dependency.alb.outputs.admin_tg_arn
   ecr_url         = dependency.ecr.outputs.admin_repo_url
   
-  app_key     = get_env("ADMIN_APP_KEY")
+  # Cleaned up: Removed all local get_env secrets calls entirely
   db_host     = "aws-1-ap-southeast-1.pooler.supabase.com"
   db_port     = "5432" 
   db_database = "postgres"
   db_username = "postgres.napretecotsfackknsgf"
-  db_password = get_env("ADMIN_DB_PASSWORD")
 }
