@@ -246,7 +246,7 @@ if [ -z "$GRAFANA_PW" ]; then
   echo "ERROR: Failed to retrieve Grafana admin password from SSM — stack will not start correctly"
 else
   cat > /opt/sre-stack/.env << ENVEOF
-GRAFANA_ADMIN_PASSWORD=${GRAFANA_PW}
+GRAFANA_ADMIN_PASSWORD=$${GRAFANA_PW}
 ENVEOF
   chmod 600 /opt/sre-stack/.env
 fi
