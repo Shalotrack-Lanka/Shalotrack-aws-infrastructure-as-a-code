@@ -5,6 +5,7 @@ include "root" {
 dependency "vpc" { config_path = "../vpc" }
 dependency "sg"  { config_path = "../security-groups" }
 dependency "iam" { config_path = "../iam-roles" }
+dependency "alb" { config_path = "../alb-shared" }
 
 generate "main" {
   path      = "main.tf"
@@ -13,6 +14,7 @@ generate "main" {
 variable "private_subnets" { type = list(string) }
 variable "sre_sg" { type = string }
 variable "iam_profile" { type = string }
+variable "tg_arn" { type = string }
 
 # Dynamically fetch the latest Amazon Linux 2023 AMI
 data "aws_ami" "amazon_linux" {
@@ -47,6 +49,7 @@ resource "aws_autoscaling_group" "sre" {
   name                = "shalotrack-sre-asg"
   # Using index [1] restricts this strictly to the 10.0.4.0/24 subnet (AZ B)
   vpc_zone_identifier = [var.private_subnets[1]]
+  target_group_arns   = [var.tg_arn]
   min_size            = 1
   max_size            = 1
   desired_capacity    = 1
@@ -69,4 +72,5 @@ inputs = {
   private_subnets = dependency.vpc.outputs.private_subnets
   sre_sg          = dependency.sg.outputs.sre_security_group_id
   iam_profile     = dependency.iam.outputs.instance_profile_name
+  tg_arn          = dependency.alb.outputs.sre_tg_arn
 }

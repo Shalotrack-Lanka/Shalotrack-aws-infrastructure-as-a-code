@@ -141,6 +141,14 @@ resource "aws_security_group" "sre_observability" {
     cidr_blocks = ["10.0.0.0/16"]
   }
 
+  ingress {
+    description     = "Grafana UI from ALB only"
+    from_port       = 3000
+    to_port         = 3000
+    protocol        = "tcp"
+    security_groups = [aws_security_group.load_balancers.id]
+  }
+
   egress {
     description = "Allow outbound out via NAT gateway to Cloudflare endpoints"
     from_port   = 0
