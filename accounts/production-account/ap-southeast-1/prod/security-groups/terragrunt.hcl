@@ -103,6 +103,50 @@ resource "aws_security_group" "web_asg" {
   }
 }
 
+
+
+sre_sg_rules = {
+  ingress_otel_grpc = {
+    description              = "Allow OpenTelemetry gRPC from VPC internal nodes"
+    from_port                = 4317
+    to_port                  = 4317
+    protocol                 = "tcp"
+    cidr_blocks              = ["10.0.0.0/16"] # Restricted to internal VPC traffic
+  }
+  ingress_otel_http = {
+    description              = "Allow OpenTelemetry HTTP from VPC internal nodes"
+    from_port                = 4318
+    to_port                  = 4318
+    protocol                 = "tcp"
+    cidr_blocks              = ["10.0.0.0/16"]
+  }
+  ingress_loki = {
+    description              = "Allow Loki log pushes from internal services"
+    from_port                = 3100
+    to_port                  = 3100
+    protocol                 = "tcp"
+    cidr_blocks              = ["10.0.0.0/16"]
+  }
+  ingress_prometheus = {
+    description              = "Allow Prometheus metrics scraping internally"
+    from_port                = 9090
+    to_port                  = 9090
+    protocol                 = "tcp"
+    cidr_blocks              = ["10.0.0.0/16"]
+  }
+  # Note: No ingress rule for port 3000 (Grafana) is required here! 
+  # The Cloudflare Tunnel creates outbound connections, bypassing inbound port verification completely.
+  
+  egress_all = {
+    description              = "Allow all outbound traffic to pass through NAT Gateway"
+    from_port                = 0
+    to_port                  = 0
+    protocol                 = "-1"
+    cidr_blocks              = ["0.0.0.0/0"]
+  }
+}
+
+
 output "lb_sg_id" { value = aws_security_group.load_balancers.id }
 output "gateway_sg_id" { value = aws_security_group.gateway_asg.id }
 output "web_sg_id" { value = aws_security_group.web_asg.id }
