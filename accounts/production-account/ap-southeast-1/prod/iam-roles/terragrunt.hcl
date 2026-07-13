@@ -80,6 +80,27 @@ resource "aws_iam_role_policy" "ssm_parameters" {
   })
 }
 
+# 8. EBS Attach Policy (Allows the SRE instance to attach its persistent data volume to itself on boot)
+resource "aws_iam_role_policy" "ebs_attach" {
+  name = "shalotrack-sre-ebs-attach-policy"
+  role = aws_iam_role.ec2_app_role.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "ec2:AttachVolume",
+          "ec2:DescribeVolumes",
+          "ec2:DescribeInstances"
+        ]
+        Resource = "*"
+      }
+    ]
+  })
+}
+
 output "instance_profile_name" {
   value = aws_iam_instance_profile.ec2_profile.name
 }

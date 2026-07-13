@@ -26,6 +26,29 @@ data "aws_ami" "amazon_linux" {
   }
 }
 
+# Look up the AZ dynamically from the subnet we're actually pinned to,
+# so the EBS volume always lands in the same AZ as the instance
+data "aws_subnet" "sre_subnet" {
+  id = var.private_subnets[1]
+}
+
+# Persistent data volume — created once, survives ASG instance replacement.
+# Holds Grafana/Prometheus/Loki/Tempo data outside the root disk.
+resource "aws_ebs_volume" "sre_data" {
+  availability_zone = data.aws_subnet.sre_subnet.availability_zone
+  size              = 20
+  type              = "gp3"
+  encrypted         = true
+
+  tags = {
+    Name = "shalotrack-sre-data"
+  }
+
+  lifecycle {
+    prevent_destroy = true
+  }
+}
+
 resource "aws_launch_template" "sre" {
   name_prefix   = "shalotrack-sre-"
   image_id      = data.aws_ami.amazon_linux.id
@@ -33,7 +56,9 @@ resource "aws_launch_template" "sre" {
   iam_instance_profile { name = var.iam_profile }
   vpc_security_group_ids = [var.sre_sg]
 
-  user_data = base64encode(file("${get_terragrunt_dir()}/../scripts/sre-user-data.sh"))
+  user_data = base64encode(templatefile("${get_terragrunt_dir()}/../scripts/sre-user-data.sh", {
+    volume_id = aws_ebs_volume.sre_data.id
+  }))
   
   block_device_mappings {
     device_name = "/dev/xvda"
@@ -65,6 +90,8 @@ resource "aws_autoscaling_group" "sre" {
     propagate_at_launch = true
   }
 }
+
+output "sre_data_volume_id" { value = aws_ebs_volume.sre_data.id }
 EOF
 }
 
