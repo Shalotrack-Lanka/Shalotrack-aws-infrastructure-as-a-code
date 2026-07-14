@@ -92,6 +92,7 @@ resource "aws_iam_role_policy" "ebs_attach" {
         Effect = "Allow"
         Action = [
           "ec2:AttachVolume",
+          "ec2:DetachVolume",
           "ec2:DescribeVolumes",
           "ec2:DescribeInstances"
         ]
@@ -100,6 +101,24 @@ resource "aws_iam_role_policy" "ebs_attach" {
     ]
   })
 }
+
+resource "aws_iam_role_policy" "route53_internal" {
+  name = "shalotrack-sre-route53-policy"
+  role = aws_iam_role.ec2_app_role.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect   = "Allow"
+        Action   = ["route53:ChangeResourceRecordSets", "route53:GetHostedZone"]
+        Resource = "*"
+      }
+    ]
+  })
+}
+
+
 
 output "instance_profile_name" {
   value = aws_iam_instance_profile.ec2_profile.name

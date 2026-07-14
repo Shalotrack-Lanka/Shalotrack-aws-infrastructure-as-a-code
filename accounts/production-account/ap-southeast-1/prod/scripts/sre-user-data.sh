@@ -30,6 +30,20 @@ INSTANCE_ID=$(curl -sH "X-aws-ec2-metadata-token: $TOKEN" http://169.254.169.254
 REGION="ap-southeast-1"
 VOLUME_ID="${volume_id}"
 
+# Check whether another (likely outgoing, mid-replacement) instance still holds this volume,
+# and force-detach it if so — otherwise this attach always loses the race during Instance Refresh,
+# since AWS launches the replacement before terminating the original.
+CURRENT_STATE=$(aws ec2 describe-volumes --volume-ids "$VOLUME_ID" --region "$REGION" --query "Volumes[0].State" --output text)
+
+if [ "$CURRENT_STATE" == "in-use" ]; then
+  ATTACHED_TO=$(aws ec2 describe-volumes --volume-ids "$VOLUME_ID" --region "$REGION" --query "Volumes[0].Attachments[0].InstanceId" --output text)
+  if [ "$ATTACHED_TO" != "$INSTANCE_ID" ] && [ "$ATTACHED_TO" != "None" ]; then
+    echo "=== Volume currently held by $ATTACHED_TO, force-detaching before claiming it ==="
+    aws ec2 detach-volume --volume-id "$VOLUME_ID" --region "$REGION" --force
+    aws ec2 wait volume-available --volume-ids "$VOLUME_ID" --region "$REGION"
+  fi
+fi
+
 aws ec2 attach-volume --volume-id "$VOLUME_ID" --instance-id "$INSTANCE_ID" --device /dev/sdf --region "$REGION" \
   || echo "Volume already attached or attach failed — continuing"
 
@@ -66,6 +80,27 @@ else
   chown -R 10001:10001 /mnt/sre-data/loki
   chown -R 10001:10001 /mnt/sre-data/tempo
 fi
+
+echo "=== Self-registering internal DNS record ==="
+ZONE_ID="${zone_id}"
+PRIVATE_IP=$(curl -sH "X-aws-ec2-metadata-token: $TOKEN" http://169.254.169.254/latest/meta-data/local-ipv4)
+
+cat > /tmp/dns-upsert.json << DNSEOF
+{
+  "Changes": [{
+    "Action": "UPSERT",
+    "ResourceRecordSet": {
+      "Name": "otel.shalotrack.internal",
+      "Type": "A",
+      "TTL": 60,
+      "ResourceRecords": [{"Value": "$PRIVATE_IP"}]
+    }
+  }]
+}
+DNSEOF
+
+aws route53 change-resource-record-sets --hosted-zone-id "$ZONE_ID" --change-batch file:///tmp/dns-upsert.json --region ap-southeast-1 \
+  || echo "ERROR: Failed to register internal DNS record — OTel endpoint may be unreachable by hostname"
 
 echo "=== Writing SRE stack configuration files ==="
 mkdir -p /opt/sre-stack

@@ -15,6 +15,7 @@ variable "private_subnets" { type = list(string) }
 variable "sre_sg" { type = string }
 variable "iam_profile" { type = string }
 variable "tg_arn" { type = string }
+variable "vpc_id" { type = string }
 
 # Dynamically fetch the latest Amazon Linux 2023 AMI
 data "aws_ami" "amazon_linux" {
@@ -49,6 +50,18 @@ resource "aws_ebs_volume" "sre_data" {
   }
 }
 
+# Private DNS zone for internal service discovery — lets apps target a stable
+# hostname (otel.shalotrack.internal) instead of an IP that changes on instance replacement.
+resource "aws_route53_zone" "internal" {
+  name = "shalotrack.internal"
+
+  vpc {
+    vpc_id = var.vpc_id
+  }
+
+  comment = "Private zone for internal service discovery (OTel endpoint, etc.)"
+}
+
 resource "aws_launch_template" "sre" {
   name_prefix   = "shalotrack-sre-"
   image_id      = data.aws_ami.amazon_linux.id
@@ -58,6 +71,7 @@ resource "aws_launch_template" "sre" {
 
   user_data = base64encode(templatefile("${get_terragrunt_dir()}/../scripts/sre-user-data.sh", {
     volume_id = aws_ebs_volume.sre_data.id
+    zone_id   = aws_route53_zone.internal.zone_id
   }))
   
   block_device_mappings {
@@ -92,6 +106,7 @@ resource "aws_autoscaling_group" "sre" {
 }
 
 output "sre_data_volume_id" { value = aws_ebs_volume.sre_data.id }
+output "internal_zone_id" { value = aws_route53_zone.internal.zone_id }
 EOF
 }
 
@@ -100,4 +115,5 @@ inputs = {
   sre_sg          = dependency.sg.outputs.sre_security_group_id
   iam_profile     = dependency.iam.outputs.instance_profile_name
   tg_arn          = dependency.alb.outputs.sre_tg_arn
+  vpc_id          = dependency.vpc.outputs.vpc_id
 }
