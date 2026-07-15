@@ -9,6 +9,7 @@ aws ecr get-login-password --region ap-southeast-1 | docker login --username AWS
 export AWS_DEFAULT_REGION="ap-southeast-1"
 ADMIN_APP_KEY=$(aws ssm get-parameter --name "/shalotrack/prod/admin/app_key" --with-decryption --query "Parameter.Value" --output text)
 ADMIN_DB_PASSWORD=$(aws ssm get-parameter --name "/shalotrack/prod/admin/db_password" --with-decryption --query "Parameter.Value" --output text)
+ADMIN_SYNC_KEY=$(aws ssm get-parameter --name "/shalotrack/prod/admin/sync_key" --with-decryption --query "Parameter.Value" --output text)
 
 # 3. Spin up the application container injecting runtime parameters
 # Note: APP_URL is correctly pointed to your production domain to resolve the 419 error
@@ -20,6 +21,7 @@ docker run -d --restart always --name shalotrack-admin \
   -e APP_KEY="$ADMIN_APP_KEY" \
   -e APP_URL="https://admin.shalotrack.com" \
   -e SHALOTRACK_API_BASE_URL="https://api.shalotrack.com" \
+  -e SHALOTRACK_SYNC_KEY="$ADMIN_SYNC_KEY" \
   -e LOG_CHANNEL="stack" \
   -e LOG_LEVEL="error" \
   -e DB_CONNECTION="pgsql" \
