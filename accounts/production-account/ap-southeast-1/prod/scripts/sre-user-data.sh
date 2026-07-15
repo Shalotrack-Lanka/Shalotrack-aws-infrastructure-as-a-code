@@ -114,6 +114,12 @@ scrape_configs:
   - job_name: 'otel-collector'
     static_configs:
       - targets: ['otel-collector:8889']
+  - job_name: 'postgres-owner'
+    static_configs:
+      - targets: ['postgres-exporter-owner:9187']
+  - job_name: 'postgres-admin'
+    static_configs:
+      - targets: ['postgres-exporter-admin:9187']
 CONFEOF
 
 cat > /opt/sre-stack/loki-config.yaml << 'CONFEOF'
@@ -265,6 +271,7 @@ services:
       - "4317:4317"
       - "4318:4318"
       - "8889:8889"
+      - "8888:8888"
     volumes:
       - /opt/sre-stack/otel-collector-config.yaml:/etc/otel-collector-config.yaml:ro
     depends_on:
@@ -272,19 +279,44 @@ services:
       - loki
       - tempo
     restart: unless-stopped
+
+  postgres-exporter-owner:
+    image: prometheuscommunity/postgres-exporter:v0.15.0
+    environment:
+      - DATA_SOURCE_NAME=$${POSTGRES_OWNER_DSN}
+    ports:
+      - "9187:9187"
+    restart: unless-stopped
+
+  postgres-exporter-admin:
+    image: prometheuscommunity/postgres-exporter:v0.15.0
+    environment:
+      - DATA_SOURCE_NAME=$${POSTGRES_ADMIN_DSN}
+    ports:
+      - "9188:9187"
+    restart: unless-stopped
+
 CONFEOF
 
 echo "=== Fetching Grafana admin password from SSM ==="
 GRAFANA_PW=$(aws ssm get-parameter --name "/shalotrack/prod/sre/grafana_admin_password" --with-decryption --query "Parameter.Value" --output text --region ap-southeast-1)
 
-if [ -z "$GRAFANA_PW" ]; then
-  echo "ERROR: Failed to retrieve Grafana admin password from SSM — stack will not start correctly"
-else
-  cat > /opt/sre-stack/.env << ENVEOF
-GRAFANA_ADMIN_PASSWORD=$${GRAFANA_PW}
-ENVEOF
-  chmod 600 /opt/sre-stack/.env
+echo "=== Fetching Postgres owner-DB monitoring DSN from SSM ==="
+POSTGRES_OWNER_DSN=$(aws ssm get-parameter --name "/shalotrack/prod/sre/postgres_owner_dsn" --with-decryption --query "Parameter.Value" --output text --region ap-southeast-1)
+
+echo "=== Fetching Postgres admin-DB monitoring DSN from SSM ==="
+POSTGRES_ADMIN_DSN=$(aws ssm get-parameter --name "/shalotrack/prod/sre/postgres_admin_dsn" --with-decryption --query "Parameter.Value" --output text --region ap-southeast-1)
+
+if [ -z "$GRAFANA_PW" ] || [ -z "$POSTGRES_OWNER_DSN" ] || [ -z "$POSTGRES_ADMIN_DSN" ]; then
+  echo "ERROR: Failed to retrieve one or more secrets from SSM — stack may not start correctly"
 fi
+
+cat > /opt/sre-stack/.env << ENVEOF
+GRAFANA_ADMIN_PASSWORD=$${GRAFANA_PW}
+POSTGRES_OWNER_DSN=$${POSTGRES_OWNER_DSN}
+POSTGRES_ADMIN_DSN=$${POSTGRES_ADMIN_DSN}
+ENVEOF
+chmod 600 /opt/sre-stack/.env
 
 echo "=== Waiting for Docker to be fully ready before starting stack ==="
 for i in {1..15}; do
