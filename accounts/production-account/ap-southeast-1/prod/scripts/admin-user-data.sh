@@ -43,3 +43,12 @@ sleep 3
 # 5. Clear application runtime caches
 docker exec shalotrack-admin php artisan config:clear
 docker exec shalotrack-admin php artisan cache:clear
+
+# 6. Node Exporter — exposes host-level CPU/RAM/Disk/Network metrics for Prometheus.
+# --net=host so it reports the real EC2 host's stats, not an isolated container's own.
+docker run -d --restart always --name node-exporter \
+  --net="host" \
+  --pid="host" \
+  -v "/:/host:ro,rslave" \
+  quay.io/prometheus/node-exporter:v1.8.2 \
+  --path.rootfs=/host

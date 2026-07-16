@@ -73,6 +73,14 @@ resource "aws_security_group" "gateway_asg" {
     cidr_blocks     = ["0.0.0.0/0"]
   }
 
+  ingress {
+    description     = "node_exporter metrics from SRE Prometheus only"
+    from_port       = 9100
+    to_port         = 9100
+    protocol        = "tcp"
+    security_groups = [aws_security_group.sre_observability.id]
+  }
+
   egress {
     from_port   = 0
     to_port     = 0
@@ -93,6 +101,14 @@ resource "aws_security_group" "web_asg" {
     to_port         = 80
     protocol        = "tcp"
     security_groups = [aws_security_group.load_balancers.id]
+  }
+
+  ingress {
+    description     = "node_exporter metrics from SRE Prometheus only"
+    from_port       = 9100
+    to_port         = 9100
+    protocol        = "tcp"
+    security_groups = [aws_security_group.sre_observability.id]
   }
 
   egress {

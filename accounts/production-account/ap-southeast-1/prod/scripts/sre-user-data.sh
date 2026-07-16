@@ -120,6 +120,48 @@ scrape_configs:
   - job_name: 'postgres-admin'
     static_configs:
       - targets: ['postgres-exporter-admin:9187']
+      
+  - job_name: 'node-api'
+    ec2_sd_configs:
+      - region: ap-southeast-1
+        port: 9100
+        filters:
+          - name: tag:Name
+            values: ["Api-shalotrack"]
+          - name: instance-state-name
+            values: ["running"]
+    relabel_configs:
+      - source_labels: [__meta_ec2_private_ip]
+        target_label: __address__
+        replacement: '$${1}:9100'
+
+  - job_name: 'node-admin'
+    ec2_sd_configs:
+      - region: ap-southeast-1
+        port: 9100
+        filters:
+          - name: tag:Name
+            values: ["Admin-shalotrack"]
+          - name: instance-state-name
+            values: ["running"]
+    relabel_configs:
+      - source_labels: [__meta_ec2_private_ip]
+        target_label: __address__
+        replacement: '$${1}:9100'
+
+  - job_name: 'node-gateway'
+    ec2_sd_configs:
+      - region: ap-southeast-1
+        port: 9100
+        filters:
+          - name: tag:Name
+            values: ["Gateway-shalotrack"]
+          - name: instance-state-name
+            values: ["running"]
+    relabel_configs:
+      - source_labels: [__meta_ec2_private_ip]
+        target_label: __address__
+        replacement: '$${1}:9100'
 CONFEOF
 
 cat > /opt/sre-stack/loki-config.yaml << 'CONFEOF'

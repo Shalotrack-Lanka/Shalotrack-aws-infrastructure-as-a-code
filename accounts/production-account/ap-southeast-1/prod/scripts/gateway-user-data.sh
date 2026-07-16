@@ -15,3 +15,12 @@ docker run -d --restart always --name shalotrack-gateway \
   -e PORT="9000" \
   -e DATABASE_URL="$GATEWAY_DATABASE_URL" \
   ${ecr_url}:latest
+
+# 4. Node Exporter — exposes host-level CPU/RAM/Disk/Network metrics for Prometheus.
+# --net=host so it reports the real EC2 host's stats, not an isolated container's own.
+docker run -d --restart always --name node-exporter \
+  --net="host" \
+  --pid="host" \
+  -v "/:/host:ro,rslave" \
+  quay.io/prometheus/node-exporter:v1.8.2 \
+  --path.rootfs=/host
