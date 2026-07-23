@@ -65,7 +65,7 @@ resource "aws_route53_zone" "internal" {
 resource "aws_launch_template" "sre" {
   name_prefix   = "shalotrack-sre-"
   image_id      = data.aws_ami.amazon_linux.id
-  instance_type = "t3.small"
+  instance_type = "t3.micro"
   iam_instance_profile { name = var.iam_profile }
   vpc_security_group_ids = [var.sre_sg]
 
