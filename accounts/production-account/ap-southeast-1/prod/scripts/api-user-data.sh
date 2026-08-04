@@ -13,11 +13,18 @@ API_REALTIME_CONNECTION_STRING=$(aws ssm get-parameter --name "/shalotrack/prod/
 # Parameter name below follows this file's existing naming convention — verify it
 # actually exists in SSM before trusting it (see chat).
 API_FIREBASE_SERVICE_ACCOUNT_JSON=$(aws ssm get-parameter --name "/shalotrack/prod/api/firebase_service_account_json" --with-decryption --query "Parameter.Value" --output text)
-
 if [ -z "$API_FIREBASE_SERVICE_ACCOUNT_JSON" ]; then
   echo "ERROR: Firebase service account JSON not found in SSM — container will crash-loop without it"
 fi
-
+# NEW — Roads API key for live-trail road-snapping (RoadSnappingService.cs).
+# Program.cs fail-fast-checks GoogleMaps:RoadsApiKey at startup, same as Firebase
+# above — without this, every fresh instance will crash-loop with
+# "GoogleMaps:RoadsApiKey is not configured." Confirmed to exist in SSM as of
+# this addition (created via Cloud Console + AWS Console together, see chat).
+API_GOOGLE_MAPS_ROADS_API_KEY=$(aws ssm get-parameter --name "/shalotrack/prod/api/google_maps_roads_api_key" --with-decryption --query "Parameter.Value" --output text)
+if [ -z "$API_GOOGLE_MAPS_ROADS_API_KEY" ]; then
+  echo "ERROR: Google Maps Roads API key not found in SSM — container will crash-loop without it"
+fi
 # 3. Spin up the C# API container using runtime memory injection
 docker run -d --restart always --name shalotrack-api \
   -p 80:8080 \
@@ -25,8 +32,8 @@ docker run -d --restart always --name shalotrack-api \
   -e ConnectionStrings__RealtimeConnection="$API_REALTIME_CONNECTION_STRING" \
   -e AdminSync__Key="$API_ADMIN_SYNC_KEY" \
   -e Firebase__ServiceAccountJson="$API_FIREBASE_SERVICE_ACCOUNT_JSON" \
+  -e GoogleMaps__RoadsApiKey="$API_GOOGLE_MAPS_ROADS_API_KEY" \
   ${ecr_url}:latest
-
 # 4. Node Exporter — exposes host-level CPU/RAM/Disk/Network metrics for Prometheus.
 # --net=host so it reports the real EC2 host's stats, not an isolated container's own.
 docker run -d --restart always --name node-exporter \
