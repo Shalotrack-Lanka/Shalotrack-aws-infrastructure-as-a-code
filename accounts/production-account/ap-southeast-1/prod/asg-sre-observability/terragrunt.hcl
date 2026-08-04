@@ -54,6 +54,7 @@ resource "aws_ebs_volume" "sre_data" {
 # hostname (otel.shalotrack.internal) instead of an IP that changes on instance replacement.
 resource "aws_route53_zone" "internal" {
   name = "shalotrack.internal"
+  force_destroy = true
 
   vpc {
     vpc_id = var.vpc_id
