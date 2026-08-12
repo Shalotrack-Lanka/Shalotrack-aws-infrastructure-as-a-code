@@ -14,6 +14,7 @@ docker run -d --restart always --name shalotrack-gateway \
   -p 8000:9000 \
   -e PORT="9000" \
   -e DATABASE_URL="$GATEWAY_DATABASE_URL" \
+  -e OTEL_EXPORTER_OTLP_ENDPOINT="http://otel.shalotrack.internal:4317" \
   ${ecr_url}:latest
 
 # 4. Node Exporter — exposes host-level CPU/RAM/Disk/Network metrics for Prometheus.
