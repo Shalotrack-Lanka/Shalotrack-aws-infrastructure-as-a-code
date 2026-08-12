@@ -32,7 +32,9 @@ docker run -d --restart always --name shalotrack-api \
   -e ConnectionStrings__RealtimeConnection="$API_REALTIME_CONNECTION_STRING" \
   -e AdminSync__Key="$API_ADMIN_SYNC_KEY" \
   -e Firebase__ServiceAccountJson="$API_FIREBASE_SERVICE_ACCOUNT_JSON" \
+  -e GpsArchive__BucketName="shalotrack-prod-gps-archive-054014030810" \
   -e GoogleMaps__RoadsApiKey="$API_GOOGLE_MAPS_ROADS_API_KEY" \
+  -e GpsArchive__PurgeDryRun="true" \
   ${ecr_url}:latest
 # 4. Node Exporter — exposes host-level CPU/RAM/Disk/Network metrics for Prometheus.
 # --net=host so it reports the real EC2 host's stats, not an isolated container's own.
