@@ -21,6 +21,7 @@ docker run -d --restart always --name shalotrack-admin \
   -e APP_KEY="$ADMIN_APP_KEY" \
   -e APP_URL="https://admin.shalotrack.com" \
   -e SHALOTRACK_API_BASE_URL="https://api.shalotrack.com" \
+  -e GOOGLE_MAPS_API_KEY="AIzaSyAKCSqz-X0GuKo31kWMI7juUuo4Fjg858Q" \
   -e SHALOTRACK_SYNC_KEY="$ADMIN_SYNC_KEY" \
   -e LOG_CHANNEL="stack" \
   -e LOG_LEVEL="error" \
