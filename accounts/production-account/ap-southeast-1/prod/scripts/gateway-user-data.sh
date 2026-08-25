@@ -8,12 +8,17 @@ aws ecr get-login-password --region ap-southeast-1 | docker login --username AWS
 # 2. Dynamically pull production database secrets from AWS SSM parameter store
 export AWS_DEFAULT_REGION="ap-southeast-1"
 GATEWAY_DATABASE_URL=$(aws ssm get-parameter --name "/shalotrack/prod/gateway/database_url" --with-decryption --query "Parameter.Value" --output text)
+GATEWAY_CONNECTION_TIMEOUT=$(aws ssm get-parameter --name "/shalotrack/prod/gateway/connection_timeout" --with-decryption --query "Parameter.Value" --output text --region ap-southeast-1)
+GATEWAY_MAX_CONNECTIONS=$(aws ssm get-parameter --name "/shalotrack/prod/gateway/max_connections" --with-decryption --query "Parameter.Value" --output text --region ap-southeast-1)
 
 # 3. Spin up the TCP Gateway container, passing the secret securely from memory[cite: 3]
 docker run -d --restart always --name shalotrack-gateway \
   -p 8000:9000 \
+  -p 8001:9001 \
   -e PORT="9000" \
   -e DATABASE_URL="$GATEWAY_DATABASE_URL" \
+  -e CONNECTION_TIMEOUT="$GATEWAY_CONNECTION_TIMEOUT" \
+  -e MAX_CONNECTIONS="$GATEWAY_MAX_CONNECTIONS" \
   -e OTEL_EXPORTER_OTLP_ENDPOINT="http://otel.shalotrack.internal:4317" \
   ${ecr_url}:latest
 
