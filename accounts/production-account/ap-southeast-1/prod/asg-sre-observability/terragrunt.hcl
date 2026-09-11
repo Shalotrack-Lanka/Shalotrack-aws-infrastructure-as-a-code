@@ -46,21 +46,25 @@ resource "aws_ebs_volume" "sre_data" {
   }
 
   lifecycle {
-    prevent_destroy = false
+    prevent_destroy = true
   }
 }
 
 # Private DNS zone for internal service discovery — lets apps target a stable
 # hostname (otel.shalotrack.internal) instead of an IP that changes on instance replacement.
 resource "aws_route53_zone" "internal" {
-  name = "shalotrack.internal"
-  force_destroy = true
+  name          = "shalotrack.internal"
+  force_destroy = false
 
   vpc {
     vpc_id = var.vpc_id
   }
 
   comment = "Private zone for internal service discovery (OTel endpoint, etc.)"
+
+  lifecycle {
+    prevent_destroy = true
+  }
 }
 
 resource "aws_launch_template" "sre" {
