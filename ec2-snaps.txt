@@ -1,0 +1,55 @@
+amodamendis@DESKTOP-1IPMTLB:/mnt/d/shalotrack-aws-iac/accounts/production-account/ap-southeast-1/prod/asg-sre-observability$ aws ec2 describe-nat-gateways \
+  --region ap-southeast-1 \
+  --filter "Name=state,Values=available" \
+  --query "NatGateways[*].{
+    NatGatewayId:NatGatewayId,
+    PublicIP:NatGatewayAddresses[0].PublicIp,
+    AllocationId:NatGatewayAddresses[0].AllocationId,
+    SubnetId:SubnetId
+  }" \
+  --output table
+-----------------------------------------------------------------------------------------------------
+|                                        DescribeNatGateways                                        |
++----------------------------+-------------------------+---------------+----------------------------+
+|        AllocationId        |      NatGatewayId       |   PublicIP    |         SubnetId           |
++----------------------------+-------------------------+---------------+----------------------------+
+|  eipalloc-0859e8806b0990d6a|  nat-0cd57def41993872d  |  52.221.63.65 |  subnet-00e354515674654cd  |
++----------------------------+-------------------------+---------------+----------------------------+
+
+
+amodamendis@DESKTOP-1IPMTLB:/mnt/d/shalotrack-aws-iac/accounts/production-account/ap-southeast-1/prod/asg-sre-observability$ aws ec2 describe-addresses \
+  --region ap-southeast-1 \
+  --query "Addresses[*].{
+    AllocationId:AllocationId,
+    PublicIP:PublicIp,
+    AssociatedWith:AssociationId
+  }" \
+  --output table
+--------------------------------------------------------------------------------
+|                               DescribeAddresses                              |
++-----------------------------+------------------------------+-----------------+
+|        AllocationId         |       AssociatedWith         |    PublicIP     |
++-----------------------------+------------------------------+-----------------+
+|  eipalloc-0dea683c693796b4f |  eipassoc-03f240d761d0a2388  |  13.228.120.152 |
+|  eipalloc-0efd8a9783d4d211e |  None                        |  13.228.148.201 |
+|  eipalloc-0d9f138a5a390b4d8 |  None                        |  13.250.77.78   |
+|  eipalloc-08584afba30f9c1f0 |  eipassoc-0f8391f98fa1107b7  |  52.220.191.74  |
+|  eipalloc-0859e8806b0990d6a |  eipassoc-0b5d1a78b73d19603  |  52.221.63.65   |
+|  eipalloc-03d2a627c2677ce40 |  None                        |  52.76.39.236   |
++-----------------------------+------------------------------+-----------------+
+
+
+amodamendis@DESKTOP-1IPMTLB:/mnt/d/shalotrack-aws-iac/accounts/production-account/ap-southeast-1/prod/asg-sre-observability$ aws route53 list-hosted-zones \
+  --query "HostedZones[*].{
+    Name:Name,
+    Id:Id,
+    RecordCount:Config.Comment
+  }" \
+  --output table
+------------------------------------------------------------------------------------------------------------------------------------
+|                                                          ListHostedZones                                                         |
++------------------------------------+-----------------------+---------------------------------------------------------------------+
+|                 Id                 |         Name          |                             RecordCount                             |
++------------------------------------+-----------------------+---------------------------------------------------------------------+
+|  /hostedzone/Z00170313SB8EQPTAZ2SA |  shalotrack.internal. |  Private zone for internal service discovery (OTel endpoint, etc.)  |
+amodamendis@DESKTOP-1IPMTLB:/mnt/d/shalotrack-aws-iac/accounts/production-account/ap-southeast-1/prod/asg-sre-observability$ 
