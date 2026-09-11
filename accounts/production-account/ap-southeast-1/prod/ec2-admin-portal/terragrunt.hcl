@@ -12,33 +12,41 @@ generate "main" {
   path      = "main.tf"
   if_exists = "overwrite_terragrunt"
   contents  = <<EOF
-variable "private_subnets" { type = list(string) }
-variable "web_sg" { type = string }
-variable "iam_profile" { type = string }
-variable "tg_arn" { type = string }
-variable "ecr_url" { type = string }
+variable "public_subnets" { type = list(string) }
+variable "web_sg"         { type = string }
+variable "iam_profile"    { type = string }
+variable "tg_arn"         { type = string }
+variable "ecr_url"        { type = string }
 
-variable "db_host" { type = string }
-variable "db_port" { type = string }
+variable "db_host"     { type = string }
+variable "db_port"     { type = string }
 variable "db_database" { type = string }
 variable "db_username" { type = string }
 
 data "aws_ami" "amazon_linux" {
   most_recent = true
   owners      = ["amazon"]
-  filter { 
+  filter {
     name   = "name"
-    values = ["al2023-ami-2023.*-x86_64"] 
+    values = ["al2023-ami-2023.*-x86_64"]
   }
 }
 
 # 1. Converted to a Launch Template
 resource "aws_launch_template" "admin" {
-  name_prefix   = "shalotrack-admin-"
-  image_id      = data.aws_ami.amazon_linux.id
-  instance_type = "t3.micro"
+  name_prefix          = "shalotrack-admin-"
+  image_id             = data.aws_ami.amazon_linux.id
+  instance_type        = "t3.micro"
   iam_instance_profile { name = var.iam_profile }
-  vpc_security_group_ids = [var.web_sg]
+
+  # PHASE 4: associate_public_ip_address = true moves this EC2 to public subnet.
+  # vpc_security_group_ids removed — security groups are now set inside
+  # network_interfaces when associate_public_ip_address is used.
+  network_interfaces {
+    associate_public_ip_address = true
+    security_groups             = [var.web_sg]
+    delete_on_termination       = true
+  }
 
   # Cleaned up: Removed app_key and db_password mapping references here
   user_data = base64encode(templatefile("${get_terragrunt_dir()}/../scripts/admin-user-data.sh", {
@@ -58,7 +66,7 @@ resource "aws_launch_template" "admin" {
 # 2. The Self-Healing ASG (Min 1, Max 1)
 resource "aws_autoscaling_group" "admin" {
   name                = "shalotrack-admin-asg"
-  vpc_zone_identifier = var.private_subnets
+  vpc_zone_identifier = var.public_subnets
   target_group_arns   = [var.tg_arn]
   min_size            = 1
   max_size            = 1
@@ -73,22 +81,21 @@ resource "aws_autoscaling_group" "admin" {
     key                 = "Name"
     value               = "Admin-shalotrack"
     propagate_at_launch = true
-  } 
-
+  }
 }
 EOF
 }
 
 inputs = {
-  private_subnets = dependency.vpc.outputs.private_subnets
-  web_sg          = dependency.sg.outputs.web_sg_id
-  iam_profile     = dependency.iam.outputs.instance_profile_name
-  tg_arn          = dependency.alb.outputs.admin_tg_arn
-  ecr_url         = dependency.ecr.outputs.admin_repo_url
-  
+  public_subnets = dependency.vpc.outputs.public_subnets
+  web_sg         = dependency.sg.outputs.web_sg_id
+  iam_profile    = dependency.iam.outputs.instance_profile_name
+  tg_arn         = dependency.alb.outputs.admin_tg_arn
+  ecr_url        = dependency.ecr.outputs.admin_repo_url
+
   # Cleaned up: Removed all local get_env secrets calls entirely
   db_host     = "aws-1-ap-southeast-1.pooler.supabase.com"
-  db_port     = "5432" 
+  db_port     = "5432"
   db_database = "postgres"
   db_username = "postgres.napretecotsfackknsgf"
 }

@@ -12,36 +12,44 @@ generate "main" {
   path      = "main.tf"
   if_exists = "overwrite_terragrunt"
   contents  = <<EOF
-variable "private_subnets" { type = list(string) }
-variable "gateway_sg" { type = string }
-variable "iam_profile" { type = string }
-variable "tg_arn" { type = string }
-variable "ecr_url" { type = string }
+variable "public_subnets" { type = list(string) }
+variable "gateway_sg"     { type = string }
+variable "iam_profile"    { type = string }
+variable "tg_arn"         { type = string }
+variable "ecr_url"        { type = string }
 
 data "aws_ami" "amazon_linux" {
   most_recent = true
   owners      = ["amazon"]
-  filter { 
+  filter {
     name   = "name"
-    values = ["al2023-ami-2023.*-x86_64"] 
+    values = ["al2023-ami-2023.*-x86_64"]
   }
 }
 
 resource "aws_launch_template" "gateway" {
-  name_prefix   = "shalotrack-gateway-"
-  image_id      = data.aws_ami.amazon_linux.id
-  instance_type = "t3.micro"
+  name_prefix          = "shalotrack-gateway-"
+  image_id             = data.aws_ami.amazon_linux.id
+  instance_type        = "t3.micro"
   iam_instance_profile { name = var.iam_profile }
-  vpc_security_group_ids = [var.gateway_sg]
+
+  # PHASE 4: associate_public_ip_address = true moves this EC2 to public subnet.
+  # vpc_security_group_ids removed — security groups are now set inside
+  # network_interfaces when associate_public_ip_address is used.
+  network_interfaces {
+    associate_public_ip_address = true
+    security_groups             = [var.gateway_sg]
+    delete_on_termination       = true
+  }
 
   user_data = base64encode(templatefile("${get_terragrunt_dir()}/../scripts/gateway-user-data.sh", {
-    ecr_url      = var.ecr_url
+    ecr_url = var.ecr_url
   }))
 }
 
 resource "aws_autoscaling_group" "gateway" {
   name                = "shalotrack-gateway-asg"
-  vpc_zone_identifier = var.private_subnets
+  vpc_zone_identifier = var.public_subnets
   target_group_arns   = [var.tg_arn]
   min_size            = 1
   max_size            = 3
@@ -61,9 +69,9 @@ EOF
 }
 
 inputs = {
-  private_subnets = dependency.vpc.outputs.private_subnets
-  gateway_sg      = dependency.sg.outputs.gateway_sg_id
-  iam_profile     = dependency.iam.outputs.instance_profile_name
-  tg_arn          = dependency.nlb.outputs.gateway_tg_arn
-  ecr_url         = dependency.ecr.outputs.gateway_repo_url
+  public_subnets = dependency.vpc.outputs.public_subnets
+  gateway_sg     = dependency.sg.outputs.gateway_sg_id
+  iam_profile    = dependency.iam.outputs.instance_profile_name
+  tg_arn         = dependency.nlb.outputs.gateway_tg_arn
+  ecr_url        = dependency.ecr.outputs.gateway_repo_url
 }

@@ -26,19 +26,22 @@ inputs = {
 
   # High Availability: Spanning across two Availability Zones in Singapore
   azs             = ["ap-southeast-1a", "ap-southeast-1b"]
-  
-  # Public Subnets (For NLB, ALB, and NAT Gateway)
-  # Matches your diagram: 10.0.1.0/24 (AZ-a) and adding 10.0.3.0/24 (AZ-b)
+
+  # Public Subnets (For NLB, ALB, and EC2s after Phase 4 migration)
+  # Matches your diagram: 10.0.1.0/24 (AZ-a) and 10.0.3.0/24 (AZ-b)
   public_subnets  = ["10.0.1.0/24", "10.0.3.0/24"]
-  
-  # Private Subnets (For Gateway ASG, API ASG, Admin EC2)
-  # Matches your diagram: 10.0.2.0/24 (AZ-a) and adding 10.0.4.0/24 (AZ-b)
+
+  # Private Subnets (Kept in state — do not remove. Removing would destroy
+  # the subnets and could cause a plan diff that recreates the VPC.)
+  # Matches your diagram: 10.0.2.0/24 (AZ-a) and 10.0.4.0/24 (AZ-b)
   private_subnets = ["10.0.2.0/24", "10.0.4.0/24"]
 
-  # NAT Gateway Configuration
-  enable_nat_gateway     = true
-  single_nat_gateway     = true  # Keeps cost down: 1 Elastic IP for outbound traffic as per your design
-  one_nat_gateway_per_az = false # Forces all private subnets to route through the single NAT
+  # PHASE 4: NAT Gateway disabled — all EC2s now use public subnets with
+  # direct internet access controlled by Security Groups.
+  # Saves ~$30/month. Do not re-enable without Nuwan Aloka approval.
+  enable_nat_gateway     = false
+  single_nat_gateway     = false
+  one_nat_gateway_per_az = false
 
   # DNS Settings (Required for internal load balancing and Supabase resolution)
   enable_dns_hostnames = true
