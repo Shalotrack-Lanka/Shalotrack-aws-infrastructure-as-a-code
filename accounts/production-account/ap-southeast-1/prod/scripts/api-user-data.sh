@@ -12,6 +12,19 @@ API_CONNECTION_STRING=$(aws ssm get-parameter \
   --name "/shalotrack/prod/api/csharp_connection_string" \
   --with-decryption --query "Parameter.Value" --output text)
 
+# BAN FIX: Hard-stop if the DB connection string is missing or empty.
+# Previously unguarded — if this SSM fetch failed for any reason (transient
+# IAM timing on boot, missing parameter, network blip), the container would
+# start with a blank ConnectionStrings__DefaultConnection, fall back to the
+# placeholder password baked into appsettings.json ("SET_ON_SERVER"), and
+# begin hammering Supabase with bad auth — triggering a Fail2ban IP ban on
+# the EC2 within seconds. Aborting here is always safer.
+if [ -z "$API_CONNECTION_STRING" ]; then
+  echo "FATAL: /shalotrack/prod/api/csharp_connection_string is missing or empty in SSM."
+  echo "FATAL: Aborting EC2 boot to prevent Supabase IP ban from bad-password retries."
+  exit 1
+fi
+
 API_ADMIN_SYNC_KEY=$(aws ssm get-parameter \
   --name "/shalotrack/prod/api/admin_sync_key" \
   --with-decryption --query "Parameter.Value" --output text)
@@ -19,6 +32,17 @@ API_ADMIN_SYNC_KEY=$(aws ssm get-parameter \
 API_REALTIME_CONNECTION_STRING=$(aws ssm get-parameter \
   --name "/shalotrack/prod/api/realtime_connection_string" \
   --with-decryption --query "Parameter.Value" --output text)
+
+# BAN FIX: Same guard for the realtime connection string.
+# LocationNotificationListener holds a persistent LISTEN connection using
+# this string. A bad or missing password here causes a retry loop every 5s
+# that triggers the Supabase circuit breaker (ECIRCUITBREAKER) and IP ban.
+# Root cause of the September 2026 production IP ban incident.
+if [ -z "$API_REALTIME_CONNECTION_STRING" ]; then
+  echo "FATAL: /shalotrack/prod/api/realtime_connection_string is missing or empty in SSM."
+  echo "FATAL: Aborting EC2 boot to prevent Supabase IP ban from bad-password retries."
+  exit 1
+fi
 
 API_FIREBASE_SERVICE_ACCOUNT_JSON=$(aws ssm get-parameter \
   --name "/shalotrack/prod/api/firebase_service_account_json" \
