@@ -58,9 +58,50 @@ if [ -z "$API_GOOGLE_MAPS_ROADS_API_KEY" ]; then
   echo "ERROR: Google Maps Roads API key not found in SSM — container will crash-loop without it"
 fi
 
-# PHASE 2 FIX: Read PurgeDryRun from SSM so it can be toggled without redeployment.
-# To promote to live deletes: aws ssm put-parameter --name "/shalotrack/prod/api/gps_archive_purge_dry_run" --value "false" --overwrite
-# Then trigger an Instance Refresh on the ASG to pick up the new value.
+# GPS ARCHIVE: Bucket name pulled from SSM — never hardcoded in this script.
+# Hardcoding a bucket name here means any bucket rename requires a Terragrunt
+# apply + ASG Instance Refresh. SSM makes it a one-liner.
+# SSM key: /shalotrack/prod/api/gps_archive_bucket_name
+GPS_ARCHIVE_BUCKET_NAME=$(aws ssm get-parameter \
+  --name "/shalotrack/prod/api/gps_archive_bucket_name" \
+  --query "Parameter.Value" --output text)
+if [ -z "$GPS_ARCHIVE_BUCKET_NAME" ]; then
+  GPS_ARCHIVE_BUCKET_NAME="shalotrack-prod-gps-archive-054014030810"
+  echo "WARNING: gps_archive_bucket_name not found in SSM — falling back to hardcoded default"
+fi
+
+# GPS ARCHIVE: AWS region for S3 client inside the container.
+GPS_ARCHIVE_REGION=$(aws ssm get-parameter \
+  --name "/shalotrack/prod/api/gps_archive_region" \
+  --query "Parameter.Value" --output text)
+if [ -z "$GPS_ARCHIVE_REGION" ]; then
+  GPS_ARCHIVE_REGION="ap-southeast-1"
+  echo "WARNING: gps_archive_region not found in SSM — defaulting to ap-southeast-1"
+fi
+
+# GPS ARCHIVE: PurgeDryRun flag — controls whether archived GPS rows are
+# actually deleted from Supabase after being written to S3.
+#
+# TOGGLING WITHOUT REDEPLOYMENT:
+#   Step 1 — Update SSM (from your local machine, no EC2 access needed):
+#     aws ssm put-parameter \
+#       --name "/shalotrack/prod/api/gps_archive_purge_dry_run" \
+#       --value "false" \
+#       --type String \
+#       --overwrite \
+#       --region ap-southeast-1
+#
+#   Step 2 — Restart the container to pick up the new value (SSM-in, one command):
+#     aws ssm start-session --target <instance-id> --region ap-southeast-1
+#     sudo docker stop shalotrack-api && sudo docker rm shalotrack-api
+#     sudo /var/lib/cloud/instance/scripts/part-001  # re-runs this script
+#
+#   DO NOT use ASG Instance Refresh just to flip this flag — that replaces
+#   the EC2 entirely and takes 5-10 minutes. The container restart above
+#   takes 15 seconds.
+#
+# Defaults TRUE — fails safe. A missing or misspelled key means
+# "don't delete anything", never the other way around.
 GPS_ARCHIVE_PURGE_DRY_RUN=$(aws ssm get-parameter \
   --name "/shalotrack/prod/api/gps_archive_purge_dry_run" \
   --query "Parameter.Value" --output text)
@@ -81,8 +122,9 @@ docker run -d --restart always --name shalotrack-api \
   -e ConnectionStrings__RealtimeConnection="$API_REALTIME_CONNECTION_STRING" \
   -e AdminSync__Key="$API_ADMIN_SYNC_KEY" \
   -e Firebase__ServiceAccountJson="$API_FIREBASE_SERVICE_ACCOUNT_JSON" \
-  -e GpsArchive__BucketName="shalotrack-prod-gps-archive-054014030810" \
   -e GoogleMaps__RoadsApiKey="$API_GOOGLE_MAPS_ROADS_API_KEY" \
+  -e GpsArchive__BucketName="$GPS_ARCHIVE_BUCKET_NAME" \
+  -e GpsArchive__Region="$GPS_ARCHIVE_REGION" \
   -e GpsArchive__PurgeDryRun="$GPS_ARCHIVE_PURGE_DRY_RUN" \
   ${ecr_url}:latest
 
