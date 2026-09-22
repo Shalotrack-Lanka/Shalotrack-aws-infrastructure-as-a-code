@@ -1,137 +1,91 @@
-#!/bin/bash
-dnf update -y && dnf install -y docker
-systemctl enable docker && systemctl start docker
+From adc05f8ddda33e3918ef09c1cf5a45a2fffcfe82 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Tue, 22 Sep 2026 09:49:36 +0530
+Subject: [PATCH] Fix missing AdminPortal__BaseUrl in ASG launch template
+ user-data
 
-# 1. Authenticate with ECR
-aws ecr get-login-password --region ap-southeast-1 | docker login --username AWS --password-stdin ${ecr_url}
+Program.cs requires AdminPortal:BaseUrl at startup and throws if it's
+missing -- this is exactly what caused the production outage during
+tonight's manual redeploy (fixed live at the time by hand). That fix
+was never brought back into this script: the ASG launch template's
+user-data still didn't set it, so any ASG-driven instance launch
+(scale-out, instance refresh, AWS host retirement) was one boot away
+from repeating that outage automatically, with nobody there to catch
+it via a manual restart.
 
-# 2. Pull down production secrets directly out of AWS SSM
-export AWS_DEFAULT_REGION="ap-southeast-1"
+Fix: pull /shalotrack/prod/api/admin_portal_base_url from SSM and pass
+it through, with the same fail-fast guard already used for the DB
+connection strings -- abort the boot cleanly instead of letting the
+container crash-loop.
 
-API_CONNECTION_STRING=$(aws ssm get-parameter \
-  --name "/shalotrack/prod/api/csharp_connection_string" \
-  --with-decryption --query "Parameter.Value" --output text)
+Also drops GpsArchive__Region -- set here but never read anywhere in
+the C# codebase (confirmed via grep), dead config left over from an
+earlier pass.
 
-# BAN FIX: Hard-stop if the DB connection string is missing or empty.
-# Previously unguarded — if this SSM fetch failed for any reason (transient
-# IAM timing on boot, missing parameter, network blip), the container would
-# start with a blank ConnectionStrings__DefaultConnection, fall back to the
-# placeholder password baked into appsettings.json ("SET_ON_SERVER"), and
-# begin hammering Supabase with bad auth — triggering a Fail2ban IP ban on
-# the EC2 within seconds. Aborting here is always safer.
-if [ -z "$API_CONNECTION_STRING" ]; then
-  echo "FATAL: /shalotrack/prod/api/csharp_connection_string is missing or empty in SSM."
-  echo "FATAL: Aborting EC2 boot to prevent Supabase IP ban from bad-password retries."
-  exit 1
-fi
+Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01K6BnW4N4xu8eR4KqANTUVM
+---
+ .../prod/scripts/api-user-data.sh             | 31 +++++++++++++------
+ 1 file changed, 21 insertions(+), 10 deletions(-)
 
-API_ADMIN_SYNC_KEY=$(aws ssm get-parameter \
-  --name "/shalotrack/prod/api/admin_sync_key" \
-  --with-decryption --query "Parameter.Value" --output text)
-
-API_REALTIME_CONNECTION_STRING=$(aws ssm get-parameter \
-  --name "/shalotrack/prod/api/realtime_connection_string" \
-  --with-decryption --query "Parameter.Value" --output text)
-
-# BAN FIX: Same guard for the realtime connection string.
-# LocationNotificationListener holds a persistent LISTEN connection using
-# this string. A bad or missing password here causes a retry loop every 5s
-# that triggers the Supabase circuit breaker (ECIRCUITBREAKER) and IP ban.
-# Root cause of the September 2026 production IP ban incident.
-if [ -z "$API_REALTIME_CONNECTION_STRING" ]; then
-  echo "FATAL: /shalotrack/prod/api/realtime_connection_string is missing or empty in SSM."
-  echo "FATAL: Aborting EC2 boot to prevent Supabase IP ban from bad-password retries."
-  exit 1
-fi
-
-API_FIREBASE_SERVICE_ACCOUNT_JSON=$(aws ssm get-parameter \
-  --name "/shalotrack/prod/api/firebase_service_account_json" \
-  --with-decryption --query "Parameter.Value" --output text)
-if [ -z "$API_FIREBASE_SERVICE_ACCOUNT_JSON" ]; then
-  echo "ERROR: Firebase service account JSON not found in SSM — container will crash-loop without it"
-fi
-
-API_GOOGLE_MAPS_ROADS_API_KEY=$(aws ssm get-parameter \
-  --name "/shalotrack/prod/api/google_maps_roads_api_key" \
-  --with-decryption --query "Parameter.Value" --output text)
-if [ -z "$API_GOOGLE_MAPS_ROADS_API_KEY" ]; then
-  echo "ERROR: Google Maps Roads API key not found in SSM — container will crash-loop without it"
-fi
-
-# GPS ARCHIVE: Bucket name pulled from SSM — never hardcoded in this script.
-# Hardcoding a bucket name here means any bucket rename requires a Terragrunt
-# apply + ASG Instance Refresh. SSM makes it a one-liner.
-# SSM key: /shalotrack/prod/api/gps_archive_bucket_name
-GPS_ARCHIVE_BUCKET_NAME=$(aws ssm get-parameter \
-  --name "/shalotrack/prod/api/gps_archive_bucket_name" \
-  --query "Parameter.Value" --output text)
-if [ -z "$GPS_ARCHIVE_BUCKET_NAME" ]; then
-  GPS_ARCHIVE_BUCKET_NAME="shalotrack-prod-gps-archive-054014030810"
-  echo "WARNING: gps_archive_bucket_name not found in SSM — falling back to hardcoded default"
-fi
-
-# GPS ARCHIVE: AWS region for S3 client inside the container.
-GPS_ARCHIVE_REGION=$(aws ssm get-parameter \
-  --name "/shalotrack/prod/api/gps_archive_region" \
-  --query "Parameter.Value" --output text)
-if [ -z "$GPS_ARCHIVE_REGION" ]; then
-  GPS_ARCHIVE_REGION="ap-southeast-1"
-  echo "WARNING: gps_archive_region not found in SSM — defaulting to ap-southeast-1"
-fi
-
-# GPS ARCHIVE: PurgeDryRun flag — controls whether archived GPS rows are
-# actually deleted from Supabase after being written to S3.
-#
-# TOGGLING WITHOUT REDEPLOYMENT:
-#   Step 1 — Update SSM (from your local machine, no EC2 access needed):
-#     aws ssm put-parameter \
-#       --name "/shalotrack/prod/api/gps_archive_purge_dry_run" \
-#       --value "false" \
-#       --type String \
-#       --overwrite \
-#       --region ap-southeast-1
-#
-#   Step 2 — Restart the container to pick up the new value (SSM-in, one command):
-#     aws ssm start-session --target <instance-id> --region ap-southeast-1
-#     sudo docker stop shalotrack-api && sudo docker rm shalotrack-api
-#     sudo /var/lib/cloud/instance/scripts/part-001  # re-runs this script
-#
-#   DO NOT use ASG Instance Refresh just to flip this flag — that replaces
-#   the EC2 entirely and takes 5-10 minutes. The container restart above
-#   takes 15 seconds.
-#
-# Defaults TRUE — fails safe. A missing or misspelled key means
-# "don't delete anything", never the other way around.
-GPS_ARCHIVE_PURGE_DRY_RUN=$(aws ssm get-parameter \
-  --name "/shalotrack/prod/api/gps_archive_purge_dry_run" \
-  --query "Parameter.Value" --output text)
-if [ -z "$GPS_ARCHIVE_PURGE_DRY_RUN" ]; then
-  GPS_ARCHIVE_PURGE_DRY_RUN="true"
-  echo "WARNING: gps_archive_purge_dry_run not found in SSM — defaulting to true (safe)"
-fi
-
-# 3. Spin up the C# API container
-# PHASE 2 FIX: ASPNETCORE_ENVIRONMENT=Production added.
-# Previously missing entirely — every fresh ASG instance was booting in
-# Development mode: Swagger exposed, wrong appsettings loaded, raw DB errors
-# visible in HTTP responses.
-docker run -d --restart always --name shalotrack-api \
-  -p 80:8080 \
-  -e ASPNETCORE_ENVIRONMENT="Production" \
-  -e ConnectionStrings__DefaultConnection="$API_CONNECTION_STRING" \
-  -e ConnectionStrings__RealtimeConnection="$API_REALTIME_CONNECTION_STRING" \
-  -e AdminSync__Key="$API_ADMIN_SYNC_KEY" \
-  -e Firebase__ServiceAccountJson="$API_FIREBASE_SERVICE_ACCOUNT_JSON" \
-  -e GoogleMaps__RoadsApiKey="$API_GOOGLE_MAPS_ROADS_API_KEY" \
-  -e GpsArchive__BucketName="$GPS_ARCHIVE_BUCKET_NAME" \
-  -e GpsArchive__Region="$GPS_ARCHIVE_REGION" \
-  -e GpsArchive__PurgeDryRun="$GPS_ARCHIVE_PURGE_DRY_RUN" \
-  ${ecr_url}:latest
-
-# 4. Node Exporter — host-level metrics for Prometheus
-docker run -d --restart always --name node-exporter \
-  --net="host" \
-  --pid="host" \
-  -v "/:/host:ro,rslave" \
-  quay.io/prometheus/node-exporter:v1.8.2 \
-  --path.rootfs=/host
+diff --git a/accounts/production-account/ap-southeast-1/prod/scripts/api-user-data.sh b/accounts/production-account/ap-southeast-1/prod/scripts/api-user-data.sh
+index 175f164..f89ef54 100644
+--- a/accounts/production-account/ap-southeast-1/prod/scripts/api-user-data.sh
++++ b/accounts/production-account/ap-southeast-1/prod/scripts/api-user-data.sh
+@@ -29,6 +29,26 @@ API_ADMIN_SYNC_KEY=$(aws ssm get-parameter \
+   --name "/shalotrack/prod/api/admin_sync_key" \
+   --with-decryption --query "Parameter.Value" --output text)
+ 
++# BAN FIX-STYLE GUARD (2026-09-22): AdminPortal:BaseUrl is a hard-required
++# startup config key (see Program.cs -- the app throws and refuses to start
++# without it). This was missing from this script entirely until now: the
++# manual docker run script used for hotfix deploys had it patched in by
++# hand after a real production outage, but that fix was never brought back
++# into this file. Any ASG-driven instance launch (scale-out, instance
++# refresh, AWS host retirement) was one crash-loop away from repeating that
++# exact outage, silently, with nobody there to catch it. Same fail-fast
++# guard as the connection strings above: abort the boot cleanly instead of
++# letting the container crash-loop.
++API_ADMIN_PORTAL_BASE_URL=$(aws ssm get-parameter \
++  --name "/shalotrack/prod/api/admin_portal_base_url" \
++  --with-decryption --query "Parameter.Value" --output text)
++
++if [ -z "$API_ADMIN_PORTAL_BASE_URL" ]; then
++  echo "FATAL: /shalotrack/prod/api/admin_portal_base_url is missing or empty in SSM."
++  echo "FATAL: Aborting EC2 boot -- the API throws on startup without AdminPortal:BaseUrl."
++  exit 1
++fi
++
+ API_REALTIME_CONNECTION_STRING=$(aws ssm get-parameter \
+   --name "/shalotrack/prod/api/realtime_connection_string" \
+   --with-decryption --query "Parameter.Value" --output text)
+@@ -70,15 +90,6 @@ if [ -z "$GPS_ARCHIVE_BUCKET_NAME" ]; then
+   echo "WARNING: gps_archive_bucket_name not found in SSM — falling back to hardcoded default"
+ fi
+ 
+-# GPS ARCHIVE: AWS region for S3 client inside the container.
+-GPS_ARCHIVE_REGION=$(aws ssm get-parameter \
+-  --name "/shalotrack/prod/api/gps_archive_region" \
+-  --query "Parameter.Value" --output text)
+-if [ -z "$GPS_ARCHIVE_REGION" ]; then
+-  GPS_ARCHIVE_REGION="ap-southeast-1"
+-  echo "WARNING: gps_archive_region not found in SSM — defaulting to ap-southeast-1"
+-fi
+-
+ # GPS ARCHIVE: PurgeDryRun flag — controls whether archived GPS rows are
+ # actually deleted from Supabase after being written to S3.
+ #
+@@ -121,10 +132,10 @@ docker run -d --restart always --name shalotrack-api \
+   -e ConnectionStrings__DefaultConnection="$API_CONNECTION_STRING" \
+   -e ConnectionStrings__RealtimeConnection="$API_REALTIME_CONNECTION_STRING" \
+   -e AdminSync__Key="$API_ADMIN_SYNC_KEY" \
++  -e AdminPortal__BaseUrl="$API_ADMIN_PORTAL_BASE_URL" \
+   -e Firebase__ServiceAccountJson="$API_FIREBASE_SERVICE_ACCOUNT_JSON" \
+   -e GoogleMaps__RoadsApiKey="$API_GOOGLE_MAPS_ROADS_API_KEY" \
+   -e GpsArchive__BucketName="$GPS_ARCHIVE_BUCKET_NAME" \
+-  -e GpsArchive__Region="$GPS_ARCHIVE_REGION" \
+   -e GpsArchive__PurgeDryRun="$GPS_ARCHIVE_PURGE_DRY_RUN" \
+   ${ecr_url}:latest
+ 
+-- 
+2.43.0
