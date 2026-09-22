@@ -2,10 +2,18 @@
 set -euo pipefail   # Fail fast — any error exits immediately instead of silently continuing
 
 # ─── Install Docker CE ────────────────────────────────────────────────────────
-# AL2023 does NOT have a package named "docker" in its native repos.
-# Docker CE must be installed from Docker's own repo using the package name "docker-ce".
-dnf install -y dnf-plugins-core
-dnf config-manager --add-repo https://download.docker.com/linux/rhel/docker-ce.repo
+# AL2023's $releasever resolves to "2023.12.XXXXXXXX" which breaks the Docker CE
+# RHEL repo URL (Docker CDN has no such path → 404). We write the repo file manually
+# with the version hardcoded to "9" (AL2023 is RHEL 9 compatible) to bypass this.
+cat > /etc/yum.repos.d/docker-ce.repo << 'EOF'
+[docker-ce-stable]
+name=Docker CE Stable - $basearch
+baseurl=https://download.docker.com/linux/rhel/9/$basearch/stable
+enabled=1
+gpgcheck=1
+gpgkey=https://download.docker.com/linux/rhel/gpg
+EOF
+
 dnf install -y docker-ce docker-ce-cli containerd.io --allowerasing
 
 systemctl enable docker
