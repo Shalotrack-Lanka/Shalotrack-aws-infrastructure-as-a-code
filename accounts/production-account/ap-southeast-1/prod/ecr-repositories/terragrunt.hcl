@@ -90,3 +90,4 @@ output "api_repo_url" { value = aws_ecr_repository.api.repository_url }
 output "admin_repo_url" { value = aws_ecr_repository.admin.repository_url }
 output "fleet_repo_url" { value = aws_ecr_repository.fleet.repository_url }
 EOF
+}
