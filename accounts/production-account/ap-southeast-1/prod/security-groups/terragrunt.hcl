@@ -111,6 +111,15 @@ resource "aws_security_group" "web_asg" {
     security_groups = [aws_security_group.load_balancers.id]
   }
 
+  # NEW — Fleet Management Portal (container listens on 8080, not 80)
+  ingress {
+    description     = "Fleet Portal traffic from LB (8080)"
+    from_port       = 8080
+    to_port         = 8080
+    protocol        = "tcp"
+    security_groups = [aws_security_group.load_balancers.id]
+  }
+
   ingress {
     description     = "node_exporter metrics from SRE Prometheus only"
     from_port       = 9100
