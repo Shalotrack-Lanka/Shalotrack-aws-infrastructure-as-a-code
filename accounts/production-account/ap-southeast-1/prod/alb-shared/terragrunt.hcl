@@ -136,7 +136,45 @@ resource "aws_lb_listener_rule" "sre_rule" {
   }
 }
 
+# 8. Target Group for Fleet Management Portal (container listens on 8080, not 80)
+resource "aws_lb_target_group" "fleet_tg" {
+  name                 = "shalotrack-fleet-tg"
+  port                 = 8080
+  protocol             = "HTTP"
+  vpc_id               = var.vpc_id
+  target_type          = "instance"
+  deregistration_delay = 30
+
+  health_check {
+    path                = "/up"
+    port                = "8080"
+    protocol            = "HTTP"
+    interval            = 30
+    healthy_threshold   = 2
+    unhealthy_threshold = 3
+    matcher             = "200"
+  }
+}
+
+# 9. Advanced Routing Rule: Send 'fleet.shalotrack.com' to Fleet Management Portal
+resource "aws_lb_listener_rule" "fleet_rule" {
+  listener_arn = aws_lb_listener.http_listener.arn
+  priority     = 80
+
+  action {
+    type             = "forward"
+    target_group_arn = aws_lb_target_group.fleet_tg.arn
+  }
+
+  condition {
+    host_header {
+      values = ["fleet.shalotrack.com"]
+    }
+  }
+}
+
 output "alb_dns_name" { value = aws_lb.shared_alb.dns_name }
+output "fleet_tg_arn" { value = aws_lb_target_group.fleet_tg.arn }
 output "api_tg_arn" { value = aws_lb_target_group.api_tg.arn }
 output "admin_tg_arn" { value = aws_lb_target_group.admin_tg.arn }
 output "sre_tg_arn" { value = aws_lb_target_group.sre_tg.arn }
