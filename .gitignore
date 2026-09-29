@@ -6,5 +6,3 @@
 *.tfstate
 *.tfstate.*
 
-# Ignore lock files if you don't want them tracked (optional, but keep cache out!)
-.terraform.lock.hcl
