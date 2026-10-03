@@ -11,6 +11,16 @@ export AWS_DEFAULT_REGION="ap-southeast-1"
 FLEET_APP_KEY=$(aws ssm get-parameter --name "/shalotrack/prod/fleet/app_key" --with-decryption --query "Parameter.Value" --output text)
 FLEET_DB_PASSWORD=$(aws ssm get-parameter --name "/shalotrack/prod/fleet/db_password" --with-decryption --query "Parameter.Value" --output text)
 FLEET_GOOGLE_MAPS_API_KEY=$(aws ssm get-parameter --name "/shalotrack/prod/fleet/google_maps_api_key" --with-decryption --query "Parameter.Value" --output text)
+FLEET_FIREBASE_PROJECT_ID=$(aws ssm get-parameter --name "/shalotrack/prod/fleet/firebase_project_id" --query "Parameter.Value" --output text)
+FLEET_FIREBASE_API_KEY=$(aws ssm get-parameter --name "/shalotrack/prod/fleet/firebase_api_key" --query "Parameter.Value" --output text)
+FLEET_FIREBASE_AUTH_DOMAIN=$(aws ssm get-parameter --name "/shalotrack/prod/fleet/firebase_auth_domain" --query "Parameter.Value" --output text)
+FLEET_FIREBASE_APP_ID=$(aws ssm get-parameter --name "/shalotrack/prod/fleet/firebase_app_id" --query "Parameter.Value" --output text)
+
+if [ -z "$FLEET_FIREBASE_PROJECT_ID" ] || [ -z "$FLEET_FIREBASE_API_KEY" ] || [ -z "$FLEET_FIREBASE_AUTH_DOMAIN" ] || [ -z "$FLEET_FIREBASE_APP_ID" ]; then
+  echo "FATAL: one or more /shalotrack/prod/fleet/firebase_* parameters missing/empty in SSM."
+  echo "FATAL: Aborting EC2 boot — the entrypoint's own guard will crash-loop the container without these."
+  exit 1
+fi
 
 # BAN FIX (same class of bug fixed on api-user-data.sh, Sep 22): hard-stop
 # on boot if the app key or DB password came back empty, instead of letting
@@ -32,6 +42,10 @@ docker run -d --restart always --name shalotrack-fleet \
   -e APP_URL="https://fleet.shalotrack.com" \
   -e SHALOTRACK_API_BASE_URL="https://api.shalotrack.com" \
   -e GOOGLE_MAPS_API_KEY="$FLEET_GOOGLE_MAPS_API_KEY" \
+  -e FIREBASE_PROJECT_ID="$FLEET_FIREBASE_PROJECT_ID" \
+  -e FIREBASE_API_KEY="$FLEET_FIREBASE_API_KEY" \
+  -e FIREBASE_AUTH_DOMAIN="$FLEET_FIREBASE_AUTH_DOMAIN" \
+  -e FIREBASE_APP_ID="$FLEET_FIREBASE_APP_ID" \
   -e LOG_CHANNEL="stderr" \
   -e LOG_LEVEL="warning" \
   -e DB_CONNECTION="pgsql" \
