@@ -41,6 +41,7 @@ docker run -d --restart always --name shalotrack-fleet \
   -e APP_KEY="$FLEET_APP_KEY" \
   -e APP_URL="https://fleet.shalotrack.com" \
   -e SHALOTRACK_API_BASE_URL="https://api.shalotrack.com" \
+  -e GEOCODER_USER_AGENT="ShaloTrack-Fleet/1.0 (contact@shalotrack.com)" \
   -e GOOGLE_MAPS_API_KEY="$FLEET_GOOGLE_MAPS_API_KEY" \
   -e FIREBASE_PROJECT_ID="$FLEET_FIREBASE_PROJECT_ID" \
   -e FIREBASE_API_KEY="$FLEET_FIREBASE_API_KEY" \
