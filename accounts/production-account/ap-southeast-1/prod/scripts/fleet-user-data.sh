@@ -1,5 +1,21 @@
 #!/bin/bash
 dnf update -y && dnf install -y docker
+
+# Docker log rotation. With the observability stack removed, `docker logs` is
+# the only log source on this host, and Docker's default json-file driver never
+# rotates -- an unbounded log would eventually fill the root disk. Written
+# BEFORE Docker starts so every container created below inherits it.
+mkdir -p /etc/docker
+cat > /etc/docker/daemon.json << 'DOCKEREOF'
+{
+  "log-driver": "json-file",
+  "log-opts": {
+    "max-size": "10m",
+    "max-file": "3"
+  }
+}
+DOCKEREOF
+
 systemctl enable docker && systemctl start docker
 
 # 1. Authenticate with ECR
@@ -69,11 +85,3 @@ sleep 3
 # 5. Clear application runtime caches
 docker exec shalotrack-fleet php artisan config:clear
 docker exec shalotrack-fleet php artisan cache:clear
-
-# 6. Node Exporter — host-level metrics for Prometheus (SRE stack).
-docker run -d --restart always --name node-exporter \
-  --net="host" \
-  --pid="host" \
-  -v "/:/host:ro,rslave" \
-  quay.io/prometheus/node-exporter:v1.8.2 \
-  --path.rootfs=/host
