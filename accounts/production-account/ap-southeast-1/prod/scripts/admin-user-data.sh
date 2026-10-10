@@ -16,6 +16,21 @@ EOF
 
 dnf install -y docker-ce docker-ce-cli containerd.io --allowerasing
 
+# Docker log rotation. With the observability stack removed, `docker logs` is
+# the only log source on this host, and Docker's default json-file driver never
+# rotates -- an unbounded log would eventually fill the root disk. Written
+# BEFORE Docker starts so every container created below inherits it.
+mkdir -p /etc/docker
+cat > /etc/docker/daemon.json << 'DOCKEREOF'
+{
+  "log-driver": "json-file",
+  "log-opts": {
+    "max-size": "10m",
+    "max-file": "3"
+  }
+}
+DOCKEREOF
+
 systemctl enable docker
 systemctl start docker
 
@@ -62,7 +77,7 @@ docker run -d \
     -e APP_ENV="production" \
     -e APP_DEBUG="false" \
     -e APP_KEY="$ADMIN_APP_KEY" \
-    -e APP_URL="https://admin.shalotrack.com" \
+    -e APP_URL="https://erp.shalotrack.com" \
     -e SHALOTRACK_API_BASE_URL="https://api.shalotrack.com" \
     -e GOOGLE_MAPS_API_KEY="$GOOGLE_MAPS_KEY" \
     -e SHALOTRACK_SYNC_KEY="$ADMIN_SYNC_KEY" \
@@ -88,14 +103,3 @@ timeout 120 bash -c \
     echo "WARNING: Admin container did not pass health check within 120 seconds — check logs below:"
     docker logs shalotrack-admin --tail 100
 }
-
-# ─── 4. Node Exporter (host metrics for Prometheus) ───────────────────────────
-# --net=host so it reports the real EC2 host's stats, not the container's.
-docker run -d \
-    --restart always \
-    --name node-exporter \
-    --net="host" \
-    --pid="host" \
-    -v "/:/host:ro,rslave" \
-    quay.io/prometheus/node-exporter:v1.8.2 \
-    --path.rootfs=/host
