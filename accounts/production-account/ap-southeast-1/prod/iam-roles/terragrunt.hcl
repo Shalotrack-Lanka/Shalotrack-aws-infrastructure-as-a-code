@@ -50,13 +50,7 @@ resource "aws_iam_role_policy_attachment" "ssm_core" {
   policy_arn = "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"
 }
 
-# 4. CloudWatch Agent (Future-proofing for sending server logs and custom metrics)
-resource "aws_iam_role_policy_attachment" "cloudwatch_agent" {
-  role       = aws_iam_role.ec2_app_role.name
-  policy_arn = "arn:aws:iam::aws:policy/CloudWatchAgentServerPolicy"
-}
-
-# 5. S3 Read-Only (Future-proofing for downloading config files or backups from S3)
+# 4. S3 Read-Only (Future-proofing for downloading config files or backups from S3)
 # NOTE: this managed policy already grants read/list on EVERY bucket in the
 # account, including the new GPS archive bucket below — broader than ideal,
 # pre-existing before this change, left as-is here. Worth tightening later
@@ -67,13 +61,13 @@ resource "aws_iam_role_policy_attachment" "s3_read" {
   policy_arn = "arn:aws:iam::aws:policy/AmazonS3ReadOnlyAccess"
 }
 
-# 6. Create the Instance Profile to attach to the ASGs
+# 5. Create the Instance Profile to attach to the ASGs
 resource "aws_iam_instance_profile" "ec2_profile" {
   name = "shalotrack-amoda-profile"
   role = aws_iam_role.ec2_app_role.name
 }
 
-# 7. Custom SSM Parameter Store Policy (Allows decryption of admin, gateway, api & sre parameters)
+# 6. Custom SSM Parameter Store Policy (Allows decryption of admin, gateway & api parameters)
 resource "aws_iam_role_policy" "ssm_parameters" {
   name = "shalotrack-ssm-parameters-policy"
   role = aws_iam_role.ec2_app_role.id
@@ -91,55 +85,16 @@ resource "aws_iam_role_policy" "ssm_parameters" {
         Resource = [
           "arn:aws:ssm:ap-southeast-1:*:parameter/shalotrack/prod/admin/*",
           "arn:aws:ssm:ap-southeast-1:*:parameter/shalotrack/prod/gateway/*",
-          "arn:aws:ssm:ap-southeast-1:*:parameter/shalotrack/prod/api/*",
-          "arn:aws:ssm:ap-southeast-1:*:parameter/shalotrack/prod/sre/*"
+          "arn:aws:ssm:ap-southeast-1:*:parameter/shalotrack/prod/api/*"
         ]
       }
     ]
   })
 }
 
-# 8. EBS Attach Policy (Allows the SRE instance to attach its persistent data volume to itself on boot)
-resource "aws_iam_role_policy" "ebs_attach" {
-  name = "shalotrack-sre-ebs-attach-policy"
-  role = aws_iam_role.ec2_app_role.id
-
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Effect = "Allow"
-        Action = [
-          "ec2:AttachVolume",
-          "ec2:DetachVolume",
-          "ec2:DescribeVolumes",
-          "ec2:DescribeInstances"
-        ]
-        Resource = "*"
-      }
-    ]
-  })
-}
-
-resource "aws_iam_role_policy" "route53_internal" {
-  name = "shalotrack-sre-route53-policy"
-  role = aws_iam_role.ec2_app_role.id
-
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Effect   = "Allow"
-        Action   = ["route53:ChangeResourceRecordSets", "route53:GetHostedZone"]
-        Resource = "*"
-      }
-    ]
-  })
-}
-
-# 9. NEW — GPS Archive Write Policy. Scoped to ONLY this one bucket's
+# 7. NEW — GPS Archive Write Policy. Scoped to ONLY this one bucket's
 # archive/ prefix, PutObject only. Read access for the same bucket already
-# comes from the AmazonS3ReadOnlyAccess attachment above (#5) — deliberately
+# comes from the AmazonS3ReadOnlyAccess attachment above (#4) — deliberately
 # not duplicating a GetObject/ListBucket grant here. No DeleteObject is
 # granted anywhere in this file, on purpose: the S3 lifecycle rule is the
 # only thing that ever deletes an archived trip.

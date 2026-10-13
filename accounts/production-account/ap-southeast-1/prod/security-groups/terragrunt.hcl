@@ -73,14 +73,6 @@ resource "aws_security_group" "gateway_asg" {
     cidr_blocks     = ["0.0.0.0/0"]
   }
 
-  ingress {
-    description     = "node_exporter metrics from SRE Prometheus only"
-    from_port       = 9100
-    to_port         = 9100
-    protocol        = "tcp"
-    security_groups = [aws_security_group.sre_observability.id]
-  }
-
   egress {
     from_port   = 0
     to_port     = 0
@@ -120,70 +112,7 @@ resource "aws_security_group" "web_asg" {
     security_groups = [aws_security_group.load_balancers.id]
   }
 
-  ingress {
-    description     = "node_exporter metrics from SRE Prometheus only"
-    from_port       = 9100
-    to_port         = 9100
-    protocol        = "tcp"
-    security_groups = [aws_security_group.sre_observability.id]
-  }
-
   egress {
-    from_port   = 0
-    to_port     = 0
-    protocol    = "-1"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-}
-
-# 4. SRE Observability Instance SG (Internal Telemetry Isolation Engine)
-resource "aws_security_group" "sre_observability" {
-  name        = "shalotrack-sre-sg"
-  description = "Isolate internal telemetry stack data processing points"
-  vpc_id      = var.vpc_id
-
-  ingress {
-    description = "Allow OpenTelemetry gRPC from VPC internal nodes"
-    from_port   = 4317
-    to_port     = 4317
-    protocol    = "tcp"
-    cidr_blocks = ["10.0.0.0/16"]
-  }
-
-  ingress {
-    description = "Allow OpenTelemetry HTTP from VPC internal nodes"
-    from_port   = 4318
-    to_port     = 4318
-    protocol    = "tcp"
-    cidr_blocks = ["10.0.0.0/16"]
-  }
-
-  ingress {
-    description = "Allow Loki log pushes from internal services"
-    from_port   = 3100
-    to_port     = 3100
-    protocol    = "tcp"
-    cidr_blocks = ["10.0.0.0/16"]
-  }
-
-  ingress {
-    description = "Allow Prometheus metrics scraping internally"
-    from_port   = 9090
-    to_port     = 9090
-    protocol    = "tcp"
-    cidr_blocks = ["10.0.0.0/16"]
-  }
-
-  ingress {
-    description     = "Grafana UI from ALB only"
-    from_port       = 3000
-    to_port         = 3000
-    protocol        = "tcp"
-    security_groups = [aws_security_group.load_balancers.id]
-  }
-
-  egress {
-    description = "Allow outbound out via NAT gateway to Cloudflare endpoints"
     from_port   = 0
     to_port     = 0
     protocol    = "-1"
@@ -194,7 +123,6 @@ resource "aws_security_group" "sre_observability" {
 output "lb_sg_id" { value = aws_security_group.load_balancers.id }
 output "gateway_sg_id" { value = aws_security_group.gateway_asg.id }
 output "web_sg_id" { value = aws_security_group.web_asg.id }
-output "sre_security_group_id" { value = aws_security_group.sre_observability.id }
 EOF
 }
 

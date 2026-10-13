@@ -70,26 +70,7 @@ resource "aws_lb_target_group" "admin_tg" {
   }
 }
 
-# 4. Target Group for Grafana (SRE Observability)
-resource "aws_lb_target_group" "sre_tg" {
-  name        = "shalotrack-sre-tg"
-  port        = 3000
-  protocol    = "HTTP"
-  vpc_id      = var.vpc_id
-  target_type = "instance"
-
-  health_check {
-    path                = "/api/health"
-    port                = "3000"
-    protocol            = "HTTP"
-    interval            = 30
-    healthy_threshold   = 2
-    unhealthy_threshold = 3
-    matcher             = "200"
-  }
-}
-
-# 5. Standard HTTP Listener
+# 4. Standard HTTP Listener
 resource "aws_lb_listener" "http_listener" {
   load_balancer_arn = aws_lb.shared_alb.arn
   port              = 80
@@ -102,7 +83,7 @@ resource "aws_lb_listener" "http_listener" {
   }
 }
 
-# 6. Advanced Routing Rule: Send 'api.*' domains to C#
+# 5. Advanced Routing Rule: Send 'api.*' domains to C#
 resource "aws_lb_listener_rule" "api_rule" {
   listener_arn = aws_lb_listener.http_listener.arn
   priority     = 100
@@ -119,24 +100,7 @@ resource "aws_lb_listener_rule" "api_rule" {
   }
 }
 
-# 7. Advanced Routing Rule: Send 'sre.shalotrack.com' to Grafana
-resource "aws_lb_listener_rule" "sre_rule" {
-  listener_arn = aws_lb_listener.http_listener.arn
-  priority     = 90
-
-  action {
-    type             = "forward"
-    target_group_arn = aws_lb_target_group.sre_tg.arn
-  }
-
-  condition {
-    host_header {
-      values = ["sre.shalotrack.com"]
-    }
-  }
-}
-
-# 8. Target Group for Fleet Management Portal (container listens on 8080, not 80)
+# 6. Target Group for Fleet Management Portal (container listens on 8080, not 80)
 resource "aws_lb_target_group" "fleet_tg" {
   name                 = "shalotrack-fleet-tg"
   port                 = 8080
@@ -156,7 +120,7 @@ resource "aws_lb_target_group" "fleet_tg" {
   }
 }
 
-# 9. Advanced Routing Rule: Send 'fleet.shalotrack.com' to Fleet Management Portal
+# 7. Advanced Routing Rule: Send 'fleet.shalotrack.com' to Fleet Management Portal
 resource "aws_lb_listener_rule" "fleet_rule" {
   listener_arn = aws_lb_listener.http_listener.arn
   priority     = 80
@@ -177,7 +141,6 @@ output "alb_dns_name" { value = aws_lb.shared_alb.dns_name }
 output "fleet_tg_arn" { value = aws_lb_target_group.fleet_tg.arn }
 output "api_tg_arn" { value = aws_lb_target_group.api_tg.arn }
 output "admin_tg_arn" { value = aws_lb_target_group.admin_tg.arn }
-output "sre_tg_arn" { value = aws_lb_target_group.sre_tg.arn }
 EOF
 }
 
