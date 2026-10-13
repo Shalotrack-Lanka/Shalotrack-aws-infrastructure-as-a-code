@@ -137,6 +137,31 @@ if [ -z "$GPS_ARCHIVE_PURGE_DRY_RUN" ]; then
   echo "WARNING: gps_archive_purge_dry_run not found in SSM — defaulting to true (safe)"
 fi
 
+# BACKGROUND-WORKER DRY-RUN FLAGS (found 2026-10-11): the running production
+# container carries four more DryRun flags that this script never set. The app
+# defaults every one of them to TRUE (log only, change nothing), so a freshly
+# launched instance would silently stop real customer reminders and the PDPA
+# account purge. They are read from SSM here, with the same fail-safe default
+# as the flag above: missing, empty or unreadable means "true" (dry-run).
+#   SSM keys (String): /shalotrack/prod/api/account_deletion_dry_run
+#                      /shalotrack/prod/api/subscription_reminders_dry_run
+#                      /shalotrack/prod/api/vehicle_reminders_dry_run
+#                      /shalotrack/prod/api/weekly_summary_dry_run
+get_dry_run_flag() {
+  local value
+  value=$(aws ssm get-parameter --name "$1" --query "Parameter.Value" --output text 2>/dev/null)
+  if [ -z "$value" ]; then
+    echo "WARNING: $1 not found in SSM — defaulting to true (dry-run, safe)" >&2
+    value="true"
+  fi
+  echo "$value"
+}
+
+ACCOUNT_DELETION_DRY_RUN=$(get_dry_run_flag "/shalotrack/prod/api/account_deletion_dry_run")
+SUBSCRIPTION_REMINDERS_DRY_RUN=$(get_dry_run_flag "/shalotrack/prod/api/subscription_reminders_dry_run")
+VEHICLE_REMINDERS_DRY_RUN=$(get_dry_run_flag "/shalotrack/prod/api/vehicle_reminders_dry_run")
+WEEKLY_SUMMARY_DRY_RUN=$(get_dry_run_flag "/shalotrack/prod/api/weekly_summary_dry_run")
+
 # 3. Spin up the C# API container
 # PHASE 2 FIX: ASPNETCORE_ENVIRONMENT=Production added.
 # Previously missing entirely — every fresh ASG instance was booting in
@@ -153,4 +178,8 @@ docker run -d --restart always --name shalotrack-api \
   -e GoogleMaps__RoadsApiKey="$API_GOOGLE_MAPS_ROADS_API_KEY" \
   -e GpsArchive__BucketName="$GPS_ARCHIVE_BUCKET_NAME" \
   -e GpsArchive__PurgeDryRun="$GPS_ARCHIVE_PURGE_DRY_RUN" \
+  -e AccountDeletion__DryRun="$ACCOUNT_DELETION_DRY_RUN" \
+  -e SubscriptionReminders__DryRun="$SUBSCRIPTION_REMINDERS_DRY_RUN" \
+  -e VehicleReminders__DryRun="$VEHICLE_REMINDERS_DRY_RUN" \
+  -e WeeklySummary__DryRun="$WEEKLY_SUMMARY_DRY_RUN" \
   ${ecr_url}:latest
