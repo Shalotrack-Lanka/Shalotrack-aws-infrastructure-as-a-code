@@ -68,6 +68,25 @@ GOOGLE_MAPS_KEY=$(aws ssm get-parameter \
     --name "/shalotrack/prod/admin/google_maps_api_key" \
     --with-decryption --query "Parameter.Value" --output text)
 
+# SECURITY (2026-10-24): shared secret the gateway's Command API now requires
+# on every request (relay_off/server/apn can command a physical vehicle relay
+# or redirect a device -- it used to accept these with no auth at all from
+# anywhere in the VPC). This Admin box calls the gateway directly in several
+# places (DashboardController, SnapshotDashboardMetrics, DeviceCommandController)
+# -- every one of those calls must send this as X-Command-Api-Key. Same value
+# as /shalotrack/prod/gateway/command_api_key and
+# /shalotrack/prod/api/gateway_command_api_key -- all three must match.
+# set -euo pipefail above already aborts this script if the SSM call itself
+# fails; this explicit check also catches the parameter existing but empty.
+GATEWAY_COMMAND_API_KEY=$(aws ssm get-parameter \
+    --name "/shalotrack/prod/admin/gateway_command_api_key" \
+    --with-decryption --query "Parameter.Value" --output text)
+if [ -z "$GATEWAY_COMMAND_API_KEY" ]; then
+    echo "FATAL: /shalotrack/prod/admin/gateway_command_api_key is missing or empty in SSM." >&2
+    echo "FATAL: Aborting -- every gateway call this app makes will be rejected (401) without it." >&2
+    exit 1
+fi
+
 # ─── 3. Start admin application container ─────────────────────────────────────
 docker run -d \
     --restart always \
@@ -81,6 +100,7 @@ docker run -d \
     -e SHALOTRACK_API_BASE_URL="https://api.shalotrack.com" \
     -e GOOGLE_MAPS_API_KEY="$GOOGLE_MAPS_KEY" \
     -e SHALOTRACK_SYNC_KEY="$ADMIN_SYNC_KEY" \
+    -e GATEWAY_COMMAND_API_KEY="$GATEWAY_COMMAND_API_KEY" \
     -e LOG_CHANNEL="stack" \
     -e LOG_LEVEL="error" \
     -e DB_CONNECTION="pgsql" \
