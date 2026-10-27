@@ -177,6 +177,32 @@ resource "aws_iam_role_policy" "gateway_ssm_parameters" {
   })
 }
 
+# NEW (2026-10-28) — Explicit Deny. AmazonSSMManagedInstanceCore (attached above)
+# grants ssm:GetParameter and ssm:GetParameters on Resource "*", so the Allow
+# above does NOT actually limit this role to gateway/*. An explicit Deny
+# overrides any Allow, which is what really enforces the path scope.
+resource "aws_iam_role_policy" "gateway_ssm_deny_other_paths" {
+  name = "shalotrack-gateway-ssm-deny-other-paths"
+  role = aws_iam_role.gateway_role.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Deny"
+        Action = [
+          "ssm:GetParameter",
+          "ssm:GetParameters",
+          "ssm:GetParametersByPath"
+        ]
+        NotResource = [
+          "arn:aws:ssm:ap-southeast-1:*:parameter/shalotrack/prod/gateway/*"
+        ]
+      }
+    ]
+  })
+}
+
 # NEW (2026-10-27) — lets the gateway instance keep gateway.shalotrack.internal
 # pointed at its own current private IP on every boot (the ASG can replace
 # this instance at any time: min=1, max=3). Scoped to ONLY this one hosted
