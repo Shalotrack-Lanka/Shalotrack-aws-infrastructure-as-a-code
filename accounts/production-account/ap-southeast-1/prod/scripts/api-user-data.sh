@@ -162,6 +162,50 @@ SUBSCRIPTION_REMINDERS_DRY_RUN=$(get_dry_run_flag "/shalotrack/prod/api/subscrip
 VEHICLE_REMINDERS_DRY_RUN=$(get_dry_run_flag "/shalotrack/prod/api/vehicle_reminders_dry_run")
 WEEKLY_SUMMARY_DRY_RUN=$(get_dry_run_flag "/shalotrack/prod/api/weekly_summary_dry_run")
 
+# SECURITY (2026-10-24): shared secret sent as X-Command-Api-Key on every call this API
+# makes to the gateway's Command API. The gateway now rejects every request without it
+# (previously open to anyone reachable on the VPC). Same value as
+# /shalotrack/prod/gateway/command_api_key -- must be put in SSM under BOTH names before
+# either of these two scripts is deployed. Program.cs throws on startup if this is missing,
+# same as the other required config above -- fail fast rather than silently sending
+# requests the gateway will now refuse.
+#
+# RESTORED 2026-10-27: this block existed in a working copy of this script but was not
+# present on main -- found only because a fresh `git clone` was done before building the
+# OTP feature below, instead of trusting a cached checkout. Without it, main as it stood
+# would crash-loop any new EC2 this script boots (ASG scale-out, instance refresh, host
+# retirement) the moment Program.cs hits its Gateway:CommandApiKey fail-fast check.
+API_GATEWAY_COMMAND_API_KEY=$(aws ssm get-parameter \
+  --name "/shalotrack/prod/api/gateway_command_api_key" \
+  --with-decryption --query "Parameter.Value" --output text)
+if [ -z "$API_GATEWAY_COMMAND_API_KEY" ]; then
+  echo "FATAL: /shalotrack/prod/api/gateway_command_api_key is missing or empty in SSM."
+  echo "FATAL: Aborting EC2 boot -- Program.cs throws on startup without Gateway:CommandApiKey."
+  exit 1
+fi
+
+# CUSTOM OTP AUTH -- TEXT.LK (2026-10-27): replaces Firebase Phone Auth's own SMS delivery
+# (Dialog/Airtel/Hutch were silently dropping Firebase's SMS). Program.cs throws on startup
+# without both of these -- same fail-fast guard as the other required config above. There is
+# no fallback path to Firebase Phone Auth: a missing key here means nobody can sign in at all.
+API_TEXTLK_API_KEY=$(aws ssm get-parameter \
+  --name "/shalotrack/prod/api/textlk_api_key" \
+  --with-decryption --query "Parameter.Value" --output text)
+if [ -z "$API_TEXTLK_API_KEY" ]; then
+  echo "FATAL: /shalotrack/prod/api/textlk_api_key is missing or empty in SSM."
+  echo "FATAL: Aborting EC2 boot -- Program.cs throws on startup without TextLk:ApiKey."
+  exit 1
+fi
+
+API_TEXTLK_SENDER_ID=$(aws ssm get-parameter \
+  --name "/shalotrack/prod/api/textlk_sender_id" \
+  --query "Parameter.Value" --output text)
+if [ -z "$API_TEXTLK_SENDER_ID" ]; then
+  echo "FATAL: /shalotrack/prod/api/textlk_sender_id is missing or empty in SSM."
+  echo "FATAL: Aborting EC2 boot -- Program.cs throws on startup without TextLk:SenderId."
+  exit 1
+fi
+
 # 3. Spin up the C# API container
 # PHASE 2 FIX: ASPNETCORE_ENVIRONMENT=Production added.
 # Previously missing entirely — every fresh ASG instance was booting in
@@ -176,6 +220,9 @@ docker run -d --restart always --name shalotrack-api \
   -e AdminPortal__BaseUrl="$API_ADMIN_PORTAL_BASE_URL" \
   -e Firebase__ServiceAccountJson="$API_FIREBASE_SERVICE_ACCOUNT_JSON" \
   -e GoogleMaps__RoadsApiKey="$API_GOOGLE_MAPS_ROADS_API_KEY" \
+  -e Gateway__CommandApiKey="$API_GATEWAY_COMMAND_API_KEY" \
+  -e TextLk__ApiKey="$API_TEXTLK_API_KEY" \
+  -e TextLk__SenderId="$API_TEXTLK_SENDER_ID" \
   -e GpsArchive__BucketName="$GPS_ARCHIVE_BUCKET_NAME" \
   -e GpsArchive__PurgeDryRun="$GPS_ARCHIVE_PURGE_DRY_RUN" \
   -e AccountDeletion__DryRun="$ACCOUNT_DELETION_DRY_RUN" \
