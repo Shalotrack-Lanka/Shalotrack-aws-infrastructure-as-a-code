@@ -46,7 +46,7 @@ resource "aws_launch_template" "gateway" {
     delete_on_termination       = true
   }
 
-  user_data = base64encode(templatefile("${get_terragrunt_dir()}/../scripts/gateway-user-data.sh", {
+  user_data = base64encode(templatefile("${replace(get_terragrunt_dir(), "\\", "/")}/../scripts/gateway-user-data.sh", {
     ecr_url        = var.ecr_url
     hosted_zone_id = var.hosted_zone_id
   }))

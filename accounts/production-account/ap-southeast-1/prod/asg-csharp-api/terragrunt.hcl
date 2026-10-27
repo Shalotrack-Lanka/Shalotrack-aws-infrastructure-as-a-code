@@ -42,7 +42,7 @@ resource "aws_launch_template" "api" {
     delete_on_termination       = true
   }
 
-  user_data = base64encode(templatefile("${get_terragrunt_dir()}/../scripts/api-user-data.sh", {
+  user_data = base64encode(templatefile("${replace(get_terragrunt_dir(), "\\", "/")}/../scripts/api-user-data.sh", {
     ecr_url = var.ecr_url
   }))
 }

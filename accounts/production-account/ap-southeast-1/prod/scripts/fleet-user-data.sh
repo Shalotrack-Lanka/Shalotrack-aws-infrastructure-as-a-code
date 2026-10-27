@@ -25,7 +25,6 @@ aws ecr get-login-password --region ap-southeast-1 | docker login --username AWS
 export AWS_DEFAULT_REGION="ap-southeast-1"
 
 FLEET_APP_KEY=$(aws ssm get-parameter --name "/shalotrack/prod/fleet/app_key" --with-decryption --query "Parameter.Value" --output text)
-FLEET_DB_PASSWORD=$(aws ssm get-parameter --name "/shalotrack/prod/fleet/db_password" --with-decryption --query "Parameter.Value" --output text)
 FLEET_GOOGLE_MAPS_API_KEY=$(aws ssm get-parameter --name "/shalotrack/prod/fleet/google_maps_api_key" --with-decryption --query "Parameter.Value" --output text)
 FLEET_FIREBASE_PROJECT_ID=$(aws ssm get-parameter --name "/shalotrack/prod/fleet/firebase_project_id" --query "Parameter.Value" --output text)
 FLEET_FIREBASE_API_KEY=$(aws ssm get-parameter --name "/shalotrack/prod/fleet/firebase_api_key" --query "Parameter.Value" --output text)
@@ -38,17 +37,20 @@ if [ -z "$FLEET_FIREBASE_PROJECT_ID" ] || [ -z "$FLEET_FIREBASE_API_KEY" ] || [ 
   exit 1
 fi
 
-# BAN FIX (same class of bug fixed on api-user-data.sh, Sep 22): hard-stop
-# on boot if the app key or DB password came back empty, instead of letting
-# the container start broken and hammer Supabase with bad auth.
-if [ -z "$FLEET_APP_KEY" ] || [ -z "$FLEET_DB_PASSWORD" ]; then
-  echo "FATAL: /shalotrack/prod/fleet/app_key or db_password missing/empty in SSM."
-  echo "FATAL: Aborting EC2 boot to prevent a broken container and Supabase bad-auth retries."
+# Hard-stop on boot if the app key came back empty, instead of letting the
+# container start broken. (Fleet has NO database: it is a BFF to the C# API,
+# with file sessions/cache, so no DB_* credentials are passed to it. Least
+# privilege -- a compromised Fleet container must not hold DB credentials.)
+if [ -z "$FLEET_APP_KEY" ]; then
+  echo "FATAL: /shalotrack/prod/fleet/app_key missing/empty in SSM."
+  echo "FATAL: Aborting EC2 boot to prevent a broken container."
   exit 1
 fi
 
 # 3. Spin up the application container. Note: -p 8080:8080, NOT 80:80 —
 # this container's nginx binds 8080 (see Dockerfile/nginx.conf), unlike admin.
+# SESSION_DOMAIN is intentionally NOT set: cookies stay host-only
+# (fleet.shalotrack.com) and are never sent to sibling subdomains.
 docker run -d --restart always --name shalotrack-fleet \
   -p 8080:8080 \
   -e APP_NAME="ShaloTrack Fleet" \
@@ -65,18 +67,11 @@ docker run -d --restart always --name shalotrack-fleet \
   -e FIREBASE_APP_ID="$FLEET_FIREBASE_APP_ID" \
   -e LOG_CHANNEL="stderr" \
   -e LOG_LEVEL="warning" \
-  -e DB_CONNECTION="pgsql" \
-  -e DB_HOST="${db_host}" \
-  -e DB_PORT="${db_port}" \
-  -e DB_DATABASE="${db_database}" \
-  -e DB_USERNAME="${db_username}" \
-  -e DB_PASSWORD="$FLEET_DB_PASSWORD" \
   -e SESSION_DRIVER="file" \
   -e SESSION_LIFETIME="120" \
   -e SESSION_COOKIE="shalotrack_fleet_session" \
   -e SESSION_SECURE_COOKIE="true" \
   -e SESSION_SAME_SITE="lax" \
-  -e SESSION_DOMAIN=".shalotrack.com" \
   ${ecr_url}:latest
 
 # 4. Wait briefly for the container to stabilize
