@@ -18,11 +18,6 @@ variable "iam_profile"    { type = string }
 variable "tg_arn"         { type = string }
 variable "ecr_url"        { type = string }
 
-variable "db_host"     { type = string }
-variable "db_port"     { type = string }
-variable "db_database" { type = string }
-variable "db_username" { type = string }
-
 data "aws_ami" "amazon_linux" {
   most_recent = true
   owners      = ["amazon"]
@@ -44,12 +39,8 @@ resource "aws_launch_template" "fleet" {
     delete_on_termination       = true
   }
 
-  user_data = base64encode(templatefile("${get_terragrunt_dir()}/../scripts/fleet-user-data.sh", {
-    ecr_url     = var.ecr_url
-    db_host     = var.db_host
-    db_port     = var.db_port
-    db_database = var.db_database
-    db_username = var.db_username
+  user_data = base64encode(templatefile("${replace(get_terragrunt_dir(), "\\", "/")}/../scripts/fleet-user-data.sh", {
+    ecr_url = var.ecr_url
   }))
 
   tag_specifications {
@@ -86,9 +77,4 @@ inputs = {
   iam_profile    = dependency.iam.outputs.instance_profile_name
   tg_arn         = dependency.alb.outputs.fleet_tg_arn
   ecr_url        = dependency.ecr.outputs.fleet_repo_url
-
-  db_host     = "aws-1-ap-southeast-1.pooler.supabase.com"
-  db_port     = "5432"
-  db_database = "postgres"
-  db_username = "postgres.napretecotsfackknsgf"
 }
