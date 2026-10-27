@@ -40,3 +40,55 @@ docker run -d --restart always --name shalotrack-gateway \
   -e DB_POOL_MIN="$GATEWAY_DB_POOL_MIN" \
   -e DB_POOL_MAX="$GATEWAY_DB_POOL_MAX" \
   ${ecr_url}:latest
+
+# ---------------------------------------------------------------------------
+# DYNAMIC DNS SELF-REGISTRATION (2026-10-27)
+# gateway.shalotrack.internal (private Route53 zone) is what ShaloTrack_API
+# calls for the Gateway Command API (port 8001, VPC-internal only -- see
+# security-groups/terragrunt.hcl). This ASG can replace this instance at any
+# time (min=1, max=3), which hands the new instance a different private IP.
+# Without this block, the DNS record goes stale on every replacement and the
+# API silently starts calling a dead or wrong host. Runs on every boot,
+# UPSERT, so the record always reflects whichever instance is actually
+# running right now.
+#
+# Deliberately best-effort, not fail-fast: the gateway's own job (serving
+# GPS device connections on 8000) does not depend on this succeeding, so a
+# transient Route53 API hiccup should not crash-loop the boot. It still logs
+# loudly on failure so it is visible in `docker logs`/cloud-init output.
+#
+# IAM: shalotrack-gateway-role grants route53:ChangeResourceRecordSets
+# scoped to ONLY this one hosted zone -- not the shared admin/api/fleet
+# role. See iam-roles/terragrunt.hcl for why this lives on its own role.
+# ---------------------------------------------------------------------------
+IMDS_TOKEN=$(curl -s -X PUT "http://169.254.169.254/latest/api/token" \
+  -H "X-aws-ec2-metadata-token-ttl-seconds: 60")
+PRIVATE_IP=$(curl -s -H "X-aws-ec2-metadata-token: $IMDS_TOKEN" \
+  http://169.254.169.254/latest/meta-data/local-ipv4)
+
+if [ -z "$PRIVATE_IP" ]; then
+  echo "WARNING: could not read instance private IP from IMDS -- skipping DNS self-registration."
+  echo "WARNING: gateway.shalotrack.internal may now be pointing at a stale/dead instance."
+else
+  aws route53 change-resource-record-sets \
+    --hosted-zone-id "${hosted_zone_id}" \
+    --change-batch '{
+      "Comment": "Gateway self-registration on boot",
+      "Changes": [{
+        "Action": "UPSERT",
+        "ResourceRecordSet": {
+          "Name": "gateway.shalotrack.internal",
+          "Type": "A",
+          "TTL": 60,
+          "ResourceRecords": [{ "Value": "'"$PRIVATE_IP"'" }]
+        }
+      }]
+    }'
+
+  if [ $? -ne 0 ]; then
+    echo "WARNING: Route53 self-registration failed. gateway.shalotrack.internal may now be stale."
+    echo "WARNING: Gateway service itself is unaffected -- this only breaks the API's ability to find it by name."
+  else
+    echo "DNS self-registration OK: gateway.shalotrack.internal -> $PRIVATE_IP"
+  fi
+fi

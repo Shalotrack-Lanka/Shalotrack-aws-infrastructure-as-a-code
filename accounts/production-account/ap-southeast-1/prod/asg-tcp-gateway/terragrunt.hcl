@@ -17,6 +17,10 @@ variable "gateway_sg"     { type = string }
 variable "iam_profile"    { type = string }
 variable "tg_arn"         { type = string }
 variable "ecr_url"        { type = string }
+# NEW (2026-10-27) -- shalotrack.internal private zone, manually created,
+# not Terraform-owned. See gateway-user-data.sh for the self-registration
+# call that uses this.
+variable "hosted_zone_id" { type = string }
 
 data "aws_ami" "amazon_linux" {
   most_recent = true
@@ -43,7 +47,8 @@ resource "aws_launch_template" "gateway" {
   }
 
   user_data = base64encode(templatefile("${get_terragrunt_dir()}/../scripts/gateway-user-data.sh", {
-    ecr_url = var.ecr_url
+    ecr_url        = var.ecr_url
+    hosted_zone_id = var.hosted_zone_id
   }))
 }
 
@@ -71,7 +76,13 @@ EOF
 inputs = {
   public_subnets = dependency.vpc.outputs.public_subnets
   gateway_sg     = dependency.sg.outputs.gateway_sg_id
-  iam_profile    = dependency.iam.outputs.instance_profile_name
+  # CHANGED (2026-10-27): was dependency.iam.outputs.instance_profile_name
+  # (the role shared with admin/api/fleet) -- gateway now gets its own
+  # dedicated role so only it can write to gateway.shalotrack.internal.
+  iam_profile    = dependency.iam.outputs.gateway_instance_profile_name
   tg_arn         = dependency.nlb.outputs.gateway_tg_arn
   ecr_url        = dependency.ecr.outputs.gateway_repo_url
+  # NEW (2026-10-27): shalotrack.internal private hosted zone ID, hardcoded
+  # because the zone is manually created, not a Terraform resource.
+  hosted_zone_id = "Z06675171G0TY639DCHZN"
 }
