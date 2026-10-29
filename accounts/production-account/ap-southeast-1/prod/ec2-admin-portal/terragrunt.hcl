@@ -49,7 +49,7 @@ resource "aws_launch_template" "admin" {
   }
 
   # Cleaned up: Removed app_key and db_password mapping references here
-  user_data = base64encode(templatefile("${get_terragrunt_dir()}/../scripts/admin-user-data.sh", {
+  user_data = base64encode(templatefile("${replace(get_terragrunt_dir(), "\\", "/")}/../scripts/admin-user-data.sh", {
     ecr_url     = var.ecr_url
     db_host     = var.db_host
     db_port     = var.db_port
