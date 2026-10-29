@@ -29,6 +29,21 @@ GATEWAY_MAX_CONNECTIONS=$(aws ssm get-parameter --name "/shalotrack/prod/gateway
 GATEWAY_DB_POOL_MIN=$(aws ssm get-parameter --name "/shalotrack/prod/gateway/db_pool_min" --query "Parameter.Value" --output text --region ap-southeast-1)
 GATEWAY_DB_POOL_MAX=$(aws ssm get-parameter --name "/shalotrack/prod/gateway/db_pool_max" --query "Parameter.Value" --output text --region ap-southeast-1)
 
+# SECURITY (2026-10-24): shared secret for the gateway's Command API (port 9001 inside the
+# container, 8001 on the host). command_api.py REFUSES TO START the Command API when
+# COMMAND_API_KEY is empty (fails closed), which silently disables "send commands to devices"
+# from the ERP Device Command Center and the C# API -- GPS ingestion on 9000 is unaffected.
+# This line was missing from this script until 2026-10-29, so every gateway server booted from
+# it had no working Command API. Must hold the SAME value as
+#   /shalotrack/prod/admin/gateway_command_api_key
+#   /shalotrack/prod/api/gateway_command_api_key
+# Warn instead of aborting the boot: GPS ingestion must keep running even if this is missing.
+GATEWAY_COMMAND_API_KEY=$(aws ssm get-parameter --name "/shalotrack/prod/gateway/command_api_key" --with-decryption --query "Parameter.Value" --output text --region ap-southeast-1)
+if [ -z "$GATEWAY_COMMAND_API_KEY" ]; then
+  echo "WARNING: /shalotrack/prod/gateway/command_api_key is missing or empty in SSM."
+  echo "WARNING: Command API will not start -- ERP Device Command Center will show the gateway as unreachable."
+fi
+
 # 3. Start the TCP Gateway container
 docker run -d --restart always --name shalotrack-gateway \
   -p 8000:9000 \
@@ -39,6 +54,7 @@ docker run -d --restart always --name shalotrack-gateway \
   -e MAX_CONNECTIONS="$GATEWAY_MAX_CONNECTIONS" \
   -e DB_POOL_MIN="$GATEWAY_DB_POOL_MIN" \
   -e DB_POOL_MAX="$GATEWAY_DB_POOL_MAX" \
+  -e COMMAND_API_KEY="$GATEWAY_COMMAND_API_KEY" \
   ${ecr_url}:latest
 
 # ---------------------------------------------------------------------------
