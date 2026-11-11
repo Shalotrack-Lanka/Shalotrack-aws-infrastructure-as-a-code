@@ -119,6 +119,7 @@ docker run -d \
     -e SESSION_ENCRYPT="false" \
     -e SESSION_PATH="/" \
     -e SESSION_DOMAIN=".shalotrack.com" \
+    -e RUN_SCHEDULER="1" \
     ${ecr_url}:latest
 
 # Block until the Laravel health endpoint responds 200.
