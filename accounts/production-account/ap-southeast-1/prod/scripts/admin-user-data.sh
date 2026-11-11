@@ -56,6 +56,10 @@ ADMIN_DB_PASSWORD=$(aws ssm get-parameter \
     --name "/shalotrack/prod/admin/db_password" \
     --with-decryption --query "Parameter.Value" --output text)
 
+ADMIN_DB_USERNAME=$(aws ssm get-parameter \
+    --name "/shalotrack/prod/admin/db_username" \
+    --query "Parameter.Value" --output text)
+
 ADMIN_SYNC_KEY=$(aws ssm get-parameter \
     --name "/shalotrack/prod/admin/sync_key" \
     --with-decryption --query "Parameter.Value" --output text)
@@ -107,7 +111,8 @@ docker run -d \
     -e DB_HOST="${db_host}" \
     -e DB_PORT="${db_port}" \
     -e DB_DATABASE="${db_database}" \
-    -e DB_USERNAME="${db_username}" \
+    -e DB_USERNAME="$ADMIN_DB_USERNAME" \
+    -e DB_SSLMODE="require" \
     -e DB_PASSWORD="$ADMIN_DB_PASSWORD" \
     -e SESSION_DRIVER="file" \
     -e SESSION_LIFETIME="120" \
