@@ -44,6 +44,14 @@ if [ -z "$GATEWAY_COMMAND_API_KEY" ]; then
   echo "WARNING: Command API will not start -- ERP Device Command Center will show the gateway as unreachable."
 fi
 
+# DEVICE TRIAL (2026-11-11): login rule for devices that are not yet bound to a customer
+# (see shalotrack-gateway docs/device-trial.md). off = exactly the old rule (Activated only),
+# shadow = log what the new rule would do but change nothing, enforce = 24h trial for unbound devices.
+# Optional on purpose: a missing parameter means "off", so booting without it can never lock devices out.
+GATEWAY_DEVICE_TRIAL_MODE=$(aws ssm get-parameter --name "/shalotrack/prod/gateway/device_trial_mode" --query "Parameter.Value" --output text --region ap-southeast-1 2>/dev/null || true)
+# (No brace-default shell syntax here: this file is a Terraform template and dollar-brace means interpolation.)
+if [ -z "$GATEWAY_DEVICE_TRIAL_MODE" ] || [ "$GATEWAY_DEVICE_TRIAL_MODE" = "None" ]; then GATEWAY_DEVICE_TRIAL_MODE="off"; fi
+
 # 3. Start the TCP Gateway container
 docker run -d --restart always --name shalotrack-gateway \
   -p 8000:9000 \
@@ -55,6 +63,7 @@ docker run -d --restart always --name shalotrack-gateway \
   -e DB_POOL_MIN="$GATEWAY_DB_POOL_MIN" \
   -e DB_POOL_MAX="$GATEWAY_DB_POOL_MAX" \
   -e COMMAND_API_KEY="$GATEWAY_COMMAND_API_KEY" \
+  -e DEVICE_TRIAL_MODE="$GATEWAY_DEVICE_TRIAL_MODE" \
   ${ecr_url}:latest
 
 # ---------------------------------------------------------------------------
